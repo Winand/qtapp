@@ -3,10 +3,11 @@
 `qtapp` helps to create Qt5 GUI with as little source code as possible.
 
 Features:
-* Loads UI-file
-* Autoconnects signals and events
-* Adds tray icon
-* Shows splash screen
+* Load UI-file
+* Compile resources
+* Connect signals and events
+* Add tray icon
+* Show splash screen
 
 Requirements:
 * pathlib
@@ -14,7 +15,7 @@ Requirements:
 * PyQt5
 
 Documentation:
-
+````
 `exec_()` - start main event loop  
 `QtApp` - QApplication subclass  
   Members:  
@@ -53,3 +54,4 @@ Documentation:
                    Note: Use `self` as `ObjName` of `QtForm` signal handlers  
   `init_tray()` - init. tray icon manually, see `tray` arg. of `QtForm`  
   `splashscreen` - `QSplashScreen` if created or None. After _init_ it's None  
+````
