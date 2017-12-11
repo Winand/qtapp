@@ -11,10 +11,8 @@ import sys
 import traceback
 import signal
 from pathlib import Path
-from qtpy import QtCore, QtGui, QtWidgets  # , uic
-from PyQt5 import uic  # FIXME: using PyQt5 and qtpy.)
+from qtpy import QtCore, QtGui, QtWidgets, uic
 _app = None  # QApplication instance
-_forms = []
 
 
 try:  # Application path
@@ -30,59 +28,82 @@ def loadUiType(uifile):
     "loadUiType which also compiles and loads resources"
     from io import StringIO
     code_string = StringIO()
-    winfo = uic.compiler.UICompiler().compileUi(uifile, code_string, False, '',
-                                                '.')
-    res_files = list_qrc(uifile)
-    res_imports = ["import " + i.stem for i in res_files]
+    uic.compileUi(uifile, code_string, resource_suffix='')
+    winfo = parse_ui(uifile)  # get info from ui-file
+    res_imports = ["import " + i.stem for i in winfo['resources']]
     source = "\n".join(i for i in code_string.getvalue().splitlines()
                        if i not in res_imports)  # skip resource files
     ui_globals = {}
     exec(source, ui_globals)
-    for i in list_qrc(uifile):
+    for i in winfo['resources']:
         load_qrc(i, Path(uifile).parent)
-    return (ui_globals[winfo["uiclass"]],
+    return (ui_globals["Ui_" + winfo["uiclass"]],
             getattr(QtWidgets, winfo["baseclass"]))
 
 
 def import_file(path):
-    "Import module from `path`"
+    "Import module from any `path`"
     path = Path(path)
-    try:
+    try:  # https://docs.python.org/3/library/importlib.html#importing-a-source-file-directly
         import importlib.util
         spec = importlib.util.spec_from_file_location(path.stem, str(path))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-    except:
-        from importlib.machinery import SourceFileLoader
-        SourceFileLoader(path.stem, str(path)).load_module()
-        
+        sys.modules[path.stem] = mod
+    except AttributeError:  # fallback to Python 3.3 implementation
+        if path.suffix.lower() == ".pyc":
+            from importlib.machinery import SourcelessFileLoader as _loader
+        else:
+            from importlib.machinery import SourceFileLoader as _loader
+        _loader(path.stem, str(path)).load_module()
 
-def list_qrc(uifile):
-    "Search ui-file for resource file paths"
+
+def parse_ui(uifile):
+    "Extract base class, UI class and resource file paths from ui-file"
     import xml.etree.ElementTree as ET
-    resources = ET.parse(uifile).getroot().find('resources')
+    ret = {'baseclass': '', 'uiclass': '', 'resources': ()}
+    root = ET.parse(uifile).getroot()
+    widget = root.find('widget')
+    if widget:
+        ret['baseclass'] = widget.attrib['class']
+        ret['uiclass'] = widget.attrib['name']
+    resources = root.find('resources')
     if resources:
-        return [Path(i.attrib['location'])
-                for i in resources.findall('include')]
-    return ()
+        ret['resources'] = [Path(i.attrib['location'])
+                            for i in resources.findall('include')]
+    return ret
 
-def load_qrc(res_file, target_path):
-    "Compile resource file to `target_path` and load it"
-    target_path, path_qrc = Path(target_path), Path(res_file)
+
+def compile_qrc(path_qrc, path_dst: Path):
+    "Compile .qrc file to .py then optionally to .pyc"
+    target_path = path_dst.parent
+    path_py = target_path / "_temp_rc_.py" \
+        if path_dst.suffix.lower() == ".pyc" else path_dst
+    if subprocess.call(['pyrcc5', '-o', str(path_py), str(path_qrc)]):
+        raise Exception("Failed to compile resource file " + str(path_qrc))
+    if path_dst.suffix.lower() == ".pyc":  # compile to .pyc
+        py_compile.compile(str(path_py), cfile=str(path_dst), doraise=True)
+        path_py.unlink()
+
+
+def load_qrc(path_qrc, target_path):
+    "Compile resource file to `target_path` if needed and load it"
+    target_path, path_qrc = Path(target_path), Path(path_qrc)
     if not path_qrc.is_absolute():
         path_qrc = target_path.joinpath(path_qrc)
     if not path_qrc.exists():
-        raise FileNotFoundError(res_file)
-    path_pyc = (target_path / ("_" + path_qrc.name)).with_suffix(".pyc")
-    if not path_pyc.exists() or (path_pyc.stat().st_mtime < \
+        raise FileNotFoundError(path_qrc)
+    path_pyc = (target_path / ("rc_" + path_qrc.name)).with_suffix(".pyc")
+    if not path_pyc.exists() or (path_pyc.stat().st_mtime <
                                  path_qrc.stat().st_mtime):
-        path_py = target_path / "_temp_rc_.py"
-        if subprocess.call(['pyrcc5', '-o', str(path_py), str(path_qrc)]):
-            raise Exception("Failed to compile resource file " + str(path_qrc))
-        py_compile.compile(str(path_py), cfile=str(path_pyc), doraise=True)
-        path_py.unlink()
-    import_file(str(path_pyc))
-        
+        compile_qrc(path_qrc, path_pyc)
+    try:
+        import_file(str(path_pyc))
+    except:  # try to rebuild resource file
+        print("Failed to load resource file. Rebuilding...")
+        compile_qrc(path_qrc, path_pyc)
+        import_file(str(path_pyc))
+
 
 def app():
     if _app is None:
@@ -108,9 +129,10 @@ def get_icon(icon):
         icon_factory = QtWidgets.qApp.style().standardIcon
     elif isinstance(icon, str):
         icon_factory = QtGui.QIcon
-        path = Path(icon)
-        if not path.is_absolute():
-            icon = str(Path.app_path.joinpath(icon))
+        if not icon.startswith(":/"):  # resource
+            path = Path(icon)
+            if not path.is_absolute():
+                icon = str(app_path.joinpath(icon))
     else:
         return
     return icon_factory(icon)
@@ -211,8 +233,8 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
             self.contextMenu().addAction(args[i]).triggered.connect(args[i+1])
 
 
-def QtForm(Form, *args, flags=QtCore.Qt.WindowType(), ui=None, ontop=False,
-           show=True, icon=None, tray=None, splash=None, loop=False, **kwargs):
+def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
+           tray=None, splash=None, loop=False, **kwargs):
     global _app
     if QtWidgets.QApplication.startingUp():
         _app = QtApp()
@@ -244,16 +266,18 @@ def QtForm(Form, *args, flags=QtCore.Qt.WindowType(), ui=None, ontop=False,
                   ) + ".ui"
     uic_cls = ()
     if Path(ui_path).exists():
-        uic_cls = tuple(reversed(loadUiType(ui_path)))
+        uic_cls = loadUiType(ui_path)
     else:
-        print("Cannot load UI file", ui_path)
+        print("Cannot load UI file", ui_path, flush=True)
 
     class QtFormWrapper(Form, *uic_cls):
         def __init__(self, *args, **kwargs):
-            fl = QtCore.Qt.WindowFlags(flags)
-            if ontop:
-                fl |= QtCore.Qt.WindowStaysOnTopHint
-            super(Form, self).__init__(*args, flags=fl, **kwargs)
+            flags_ = (QtCore.Qt.WindowFlags(flags or 0) |
+                      (QtCore.Qt.WindowStaysOnTopHint if ontop else 0))
+            if flags_:
+                kwargs = kwargs.copy()
+                kwargs['flags'] = QtCore.Qt.WindowFlags(flags_)
+            super(Form, self).__init__(*args, **kwargs)
             if hasattr(self, "setupUi"):  # init `loadUiType` generated class
                 self.setupUi(self)
             if icon or self.windowIcon().isNull():
@@ -269,6 +293,7 @@ def QtForm(Form, *args, flags=QtCore.Qt.WindowType(), ui=None, ontop=False,
             if uic_cls:  # if UI-file loaded
                 self.connect_all()  # connect signals and events
             if "__init__" in Form.__dict__:
+                kwargs.pop('flags', None)
                 Form.__init__(self, *args, **kwargs)
             self.splashscreen = None  # delete splash screen
 
@@ -404,10 +429,12 @@ else:
 #   Arguments:
 #   `Form` - user class to use as a subclass of `QWidget` (explicitly specify
 #           super class [QDialog|QWidget|QMainWindow] if ui-file is not used)
-#   `flags`=QtCore.Qt.WindowType() - Qt.WindowFlags
+#   `flags`=None - Qt.WindowFlags
 #   `ui`=None - path to .ui-file, if `None` try lowercase name of `Form` class
-#   `ontop`=False - show window always on top
-#   `icon`=None - set window icon: QIcon|QStyle.StandardPixmap|image-path
+#   `ontop`=False - show window always on top, adds `WindowStaysOnTopHint` flag
+#                   to `flags`.
+#   `icon`=None - set window icon: QIcon|QStyle.StandardPixmap|image-path.
+#                 `SP_TitleBarMenuButton` icon is used by default
 #   `show`=True - show window by default. Always True if `splash` provided.
 #   `tray`=None - add tray icon: True (use QtForm window icon)|dict
 #       Arguments:
