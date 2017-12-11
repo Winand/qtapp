@@ -428,7 +428,7 @@ else:
 #              of user class: _argname_ = value
 #   Arguments:
 #   `Form` - user class to use as a subclass of `QWidget` (explicitly specify
-#           super class [QDialog|QWidget|QMainWindow] if ui-file is not used)
+#            super class [QDialog|QWidget|QMainWindow] if ui-file is not used)
 #   `flags`=None - Qt.WindowFlags
 #   `ui`=None - path to .ui-file, if `None` try lowercase name of `Form` class
 #   `ontop`=False - show window always on top, adds `WindowStaysOnTopHint` flag
