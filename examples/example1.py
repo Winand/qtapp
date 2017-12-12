@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from qtapp.qtapp import QtForm
+from qtapp import QtForm
 
 
 class Example1():
