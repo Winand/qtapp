@@ -12,6 +12,7 @@ import traceback
 import signal
 from pathlib import Path
 from qtpy import QtCore, QtGui, QtWidgets, uic
+Qt = QtCore.Qt
 _app = None  # QApplication instance
 
 
@@ -99,7 +100,7 @@ def load_qrc(path_qrc, target_path):
         compile_qrc(path_qrc, path_pyc)
     try:
         import_file(str(path_pyc))
-    except:  # try to rebuild resource file
+    except ImportError:  # try to rebuild resource file
         print("Failed to load resource file. Rebuilding...")
         compile_qrc(path_qrc, path_pyc)
         import_file(str(path_pyc))
@@ -118,7 +119,6 @@ def exec_():
         sys.exit(app().exec_())
     except SystemExit:
         print('Exit main loop')
-        pass
 
 
 def get_icon(icon):
@@ -233,6 +233,17 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
             self.contextMenu().addAction(args[i]).triggered.connect(args[i+1])
 
 
+def split_kwargs(kwargs):
+    "Split dict into 2 dicts by `_super` postfix in keys"
+    kw, super_kw = {}, {}
+    for k, v in kwargs.items():
+        if k.endswith("_super"):
+            super_kw[k[:-6]] = v
+        else:
+            kw[k] = v
+    return kw, super_kw
+
+
 def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
            tray=None, splash=None, loop=False, **kwargs):
     global _app
@@ -254,14 +265,13 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
     splash = {'image': splash} if isinstance(splash,
                                              (str, Path)) else splash
     if splash:
-        sp_scr = QtWidgets.QSplashScreen(
-            QtGui.QPixmap(app_path+splash['image']))  # FIXME: relative path?
+        sp_scr = QtWidgets.QSplashScreen(QtGui.QPixmap(splash['image']))
         sp_scr.show()
         if splash.get('title'):  # Show message
             sp_scr.showMessage(splash['title'],
-                               splash.get('align', QtCore.Qt.AlignHCenter |
-                                                   QtCore.Qt.AlignBottom),
-                               splash.get('color', QtCore.Qt.black))
+                               splash.get('align', Qt.AlignHCenter |
+                                                   Qt.AlignBottom),
+                               splash.get('color', Qt.black))
     ui_path = str(ui or module_path(Form).joinpath(Form.__name__.lower())
                   ) + ".ui"
     uic_cls = ()
@@ -272,12 +282,12 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
 
     class QtFormWrapper(Form, *uic_cls):
         def __init__(self, *args, **kwargs):
-            flags_ = (QtCore.Qt.WindowFlags(flags or 0) |
-                      (QtCore.Qt.WindowStaysOnTopHint if ontop else 0))
+            flags_ = (Qt.WindowFlags(flags or 0) |
+                      (Qt.WindowStaysOnTopHint if ontop else 0))
+            kwargs, super_kwargs = split_kwargs(kwargs)
             if flags_:
-                kwargs = kwargs.copy()
-                kwargs['flags'] = QtCore.Qt.WindowFlags(flags_)
-            super(Form, self).__init__(*args, **kwargs)
+                super_kwargs['flags'] = Qt.WindowFlags(flags_)
+            super(Form, self).__init__(**super_kwargs)
             if hasattr(self, "setupUi"):  # init `loadUiType` generated class
                 self.setupUi(self)
             if icon or self.windowIcon().isNull():
@@ -290,12 +300,10 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
             self.splashscreen = sp_scr if splash else None
             self.generateElipsisMenus()
             self._connections = []  # list of connections made by `connect_all`
-            if uic_cls:  # if UI-file loaded
-                self.connect_all()  # connect signals and events
             if "__init__" in Form.__dict__:
-                kwargs.pop('flags', None)
                 Form.__init__(self, *args, **kwargs)
             self.splashscreen = None  # delete splash screen
+            self.connect_all()  # connect signals and events
 
         def init_tray(self, tray_opts={}):
             # Tray icon parent is VERY important:
@@ -388,7 +396,7 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
                 setattr(self, i.objectName(), i)
 
     instance = QtFormWrapper(*args, **kwargs)
-    if show or splash:
+    if show or splash:  # FIXME: splash?
         instance.show()
     if splash:
         sp_scr.close()  # finish(instance)
@@ -403,59 +411,24 @@ if __name__ == '__main__':
         _ontop_ = True
 
         def __init__(self, *args, **kwargs):
-            self.ev_count = 0
-            self.pushButton1 = QtWidgets.QPushButton(self)
-            self.connect_all()
+            self.pushButton1 = QtWidgets.QPushButton("Push", self)
+            self.setGeometry(200, 200, 200, 200)
+
+        def pushButton1_clicked(self):
+            print('Button clicked')
 
         def paintEvent(self, event):
             p = QtGui.QPainter(self)
+            t = "Center of the widget"
+            p.setPen(QtGui.QColor("white"))
+            p.drawText(event.rect().translated(1, 1), Qt.AlignCenter, t)
             p.setPen(QtGui.QColor("gray"))
-            p.drawText(event.rect(), QtCore.Qt.AlignCenter,
-                       "Center of the widget")
+            p.drawText(event.rect(), Qt.AlignCenter, t)
 
     QtForm(Form)
 else:
     print("Loaded shared qtapp module (Qt %s)" % QtCore.__version__)
 
-
-# Documentation:
-# `exec_()` - start main event loop
-# `QtApp` - QApplication subclass
-#   Members:
-#   `path` - application path
-# `app()` - `QtApp` instance
-# `QtForm()` - create new Qt window. Arguments can be provided in variables
-#              of user class: _argname_ = value
-#   Arguments:
-#   `Form` - user class to use as a subclass of `QWidget` (explicitly specify
-#            super class [QDialog|QWidget|QMainWindow] if ui-file is not used)
-#   `flags`=None - Qt.WindowFlags
-#   `ui`=None - path to .ui-file, if `None` try lowercase name of `Form` class
-#   `ontop`=False - show window always on top, adds `WindowStaysOnTopHint` flag
-#                   to `flags`.
-#   `icon`=None - set window icon: QIcon|QStyle.StandardPixmap|image-path.
-#                 `SP_TitleBarMenuButton` icon is used by default
-#   `show`=True - show window by default. Always True if `splash` provided.
-#   `tray`=None - add tray icon: True (use QtForm window icon)|dict
-#       Arguments:
-#       {`tip` - tray icon tooltip,
-#        `icon` - custom icon (see `QtForm` `icon` arg)}
-#   `splash`=None - show splash screen: str|pathlib.Path|dict
-#                   Pass image path only or options dict.
-#       Arguments:
-#       {`image` - path to splash screen image file,
-#        `title`="Loading application..." - caption on the splash screen,
-#        `align`=Qt.AlignHCenter|Qt.AlignBottom - caption alignment,
-#        `color`=Qt.black - caption color}
-#   `loop`=False - do not return and start main event loop
-#   Members:
-#   `app` - `QtApp` instance
-#   `tray` - `QSystemTrayIcon` if created or None
-#       Members:
-#       `addMenuItem(name1, func1, ...)` - add 1 or more context menu items
-#   `connect_all()` - connects events and signals to appropriate members:
-#                    def ObjName_SignalName(...), special: def eventFilter(...)
-#                    Note: It is called automatically if .ui-file is loaded
-#                    Note: Use `self` as `ObjName` of `QtForm` signal handlers
-#   `init_tray()` - init. tray icon manually, see `tray` arg. of `QtForm`
-#   `splashscreen` - `QSplashScreen` if created or None. After _init_ it's None
+# TODO:
+# Невозможно использовать ресурсы в splash, поскольку они загружаются позже
+# возможность загружать qrc отдельно, не загружать один файл ресурсов повторно
