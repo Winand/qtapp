@@ -9,4 +9,5 @@ class Example1():
     def pb_clicked(self):
         print(self.txt.text())
 
+
 QtForm(Example1)

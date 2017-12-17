@@ -22,9 +22,10 @@ Documentation:
 `QtApp` - QApplication subclass
   Members:
   `path` - application path
-`app()` - `QtApp` instance
-`QtForm()` - create new Qt window. Arguments can be provided in variables
-             of user class: _argname_ = value
+  `load_resources` - load specified .qrc-file
+`app()` - `QtApp` instance, creates a new one on 1st call
+`QtForm()` - create new Qt window (and `QtApp` instance if needed). Arguments
+             can be provided in variables of user class: _argname_ = value
   Arguments:
   `Form` - user class to use as a subclass of `QWidget` (explicitly specify
            super class [QDialog|QWidget|QMainWindow] if ui-file is not used)

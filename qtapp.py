@@ -43,20 +43,20 @@ def loadUiType(uifile):
 
 
 def import_file(path):
-    "Import module from any `path`"
+    "Import module from any `path`, adds it to `sys.modules` as `MOD__(path)`"
     path = Path(path)
     try:  # https://docs.python.org/3/library/importlib.html#importing-a-source-file-directly
         import importlib.util
         spec = importlib.util.spec_from_file_location(path.stem, str(path))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        sys.modules[path.stem] = mod
+        sys.modules["MOD__%s" % path] = mod
     except AttributeError:  # fallback to Python 3.3 implementation
         if path.suffix.lower() == ".pyc":
             from importlib.machinery import SourcelessFileLoader as _loader
         else:
             from importlib.machinery import SourceFileLoader as _loader
-        _loader(path.stem, str(path)).load_module()
+        _loader("MOD__%s" % path, str(path)).load_module()
 
 
 def parse_ui(uifile):
@@ -90,8 +90,8 @@ def compile_qrc(path_qrc, path_dst: Path):
 def load_qrc(path_qrc, target_path):
     "Compile resource file to `target_path` if needed and load it"
     target_path, path_qrc = Path(target_path), Path(path_qrc)
-    if not path_qrc.is_absolute():
-        path_qrc = target_path.joinpath(path_qrc)
+#    if not path_qrc.is_absolute():
+#        path_qrc = target_path.joinpath(path_qrc)
     if not path_qrc.exists():
         raise FileNotFoundError(path_qrc)
     path_pyc = (target_path / ("rc_" + path_qrc.name)).with_suffix(".pyc")
@@ -107,8 +107,10 @@ def load_qrc(path_qrc, target_path):
 
 
 def app():
+    "QApplication instance"
+    global _app
     if _app is None:
-        print("app: Call QtApp or QtForm first")
+        _app = QtApp()
     return _app
 
 
@@ -172,7 +174,10 @@ class QtApp(QtWidgets.QApplication):
 #            return self.obj.winEventFilter(message)
 
     def __init__(self):
-        print("Init QApplication instance")
+        if QtWidgets.QApplication.startingUp():
+            print("Init QApplication instance")
+        else:
+            print("Reusing existing QApplication instance")
         super().__init__(sys.argv)
         if QtCore.QT_VERSION >= 0x50501:
             # http://stackoverflow.com/questions/33736819/pyqt-no-error-msg-traceback-on-exit
@@ -210,6 +215,14 @@ class QtApp(QtWidgets.QApplication):
 #                self.quit()
 #        return False, 0
 
+        # default window icon
+        self.setWindowIcon(get_icon(QtWidgets.QStyle.SP_TitleBarMenuButton))
+
+    def load_resources(self, path):
+        "Load .qrc file from specified `path`"
+        target_path = str(Path(path).parent.absolute())
+        load_qrc(path, target_path)
+
     def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent):
         event_type = event.type()
         if event_type == QtCore.QEvent.ApplicationDeactivate:
@@ -246,12 +259,6 @@ def split_kwargs(kwargs):
 
 def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
            tray=None, splash=None, loop=False, **kwargs):
-    global _app
-    if QtWidgets.QApplication.startingUp():
-        _app = QtApp()
-    elif not _app:
-        print("Reuse existing QApplication.instance()")
-        _app = QtWidgets.QApplication.instance()
     # get arguments from class members: _ArgName_
     flags = getattr(Form, "_flags_", flags)
     ui = getattr(Form, "_ui_", ui)
@@ -261,6 +268,8 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
     tray = getattr(Form, "_tray_", tray)
     splash = getattr(Form, "_splash_", splash)
     loop = getattr(Form, "_loop_", loop)
+
+    app()  # Init QApplication if needed
 
     splash = {'image': splash} if isinstance(splash,
                                              (str, Path)) else splash
@@ -290,9 +299,8 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
             super(Form, self).__init__(**super_kwargs)
             if hasattr(self, "setupUi"):  # init `loadUiType` generated class
                 self.setupUi(self)
-            if icon or self.windowIcon().isNull():
-                self.setWindowIcon(
-                    get_icon(icon or QtWidgets.QStyle.SP_TitleBarMenuButton))
+            if icon:
+                self.setWindowIcon(get_icon(icon))
             if hasattr(self, "tray"):
                 raise(Exception("Widget already has 'tray' attr"))
             self.init_tray({} if tray is True else tray)
@@ -430,5 +438,4 @@ else:
     print("Loaded shared qtapp module (Qt %s)" % QtCore.__version__)
 
 # TODO:
-# Невозможно использовать ресурсы в splash, поскольку они загружаются позже
-# возможность загружать qrc отдельно, не загружать один файл ресурсов повторно
+# ? импорт ресурсов из zip: https://docs.python.org/3.6/library/zipimport.html
