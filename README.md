@@ -49,6 +49,7 @@ Documentation:
        `align`=Qt.AlignHCenter|Qt.AlignBottom - caption alignment,
        `color`=Qt.black - caption color}
   `loop`=False - do not return and start main event loop
+  `connect`=True - call `connect_all()` after initialization
   `**kwargs`=() - additional keyword arguments for user class `__init__`.
                   To pass additional arguments to base class `__init__` use
                   keywords with `_super` postfix.
@@ -59,7 +60,6 @@ Documentation:
       `addMenuItem(name1, func1, ...)` - add 1 or more context menu items
   `connect_all()` - connects events and signals to appropriate members:
                    def ObjName_SignalName(...), special: def eventFilter(...)
-                   Note: It is called automatically after initialization
                    Note: Use `self` as `ObjName` of `QtForm` signal handlers
   `init_tray()` - init. tray icon manually, see `tray` arg. of `QtForm`
   `splashscreen` - `QSplashScreen` if created or None. After _init_ it's None

@@ -258,7 +258,7 @@ def split_kwargs(kwargs):
 
 
 def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
-           tray=None, splash=None, loop=False, **kwargs):
+           tray=None, splash=None, loop=False, connect=True, **kwargs):
     # get arguments from class members: _ArgName_
     flags = getattr(Form, "_flags_", flags)
     ui = getattr(Form, "_ui_", ui)
@@ -268,6 +268,7 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
     tray = getattr(Form, "_tray_", tray)
     splash = getattr(Form, "_splash_", splash)
     loop = getattr(Form, "_loop_", loop)
+    connect = getattr(Form, "_connect_", connect)
 
     app()  # Init QApplication if needed
 
@@ -311,7 +312,8 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
             if "__init__" in Form.__dict__:
                 Form.__init__(self, *args, **kwargs)
             self.splashscreen = None  # delete splash screen
-            self.connect_all()  # connect signals and events
+            if connect:
+                self.connect_all()  # connect signals and events
 
         def init_tray(self, tray_opts={}):
             # Tray icon parent is VERY important:
@@ -436,6 +438,3 @@ if __name__ == '__main__':
     QtForm(Form)
 else:
     print("Loaded shared qtapp module (Qt %s)" % QtCore.__version__)
-
-# TODO:
-# ? импорт ресурсов из zip: https://docs.python.org/3.6/library/zipimport.html
