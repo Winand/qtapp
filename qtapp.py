@@ -14,6 +14,7 @@ from pathlib import Path
 from qtpy import QtCore, QtGui, QtWidgets, uic
 Qt = QtCore.Qt
 _app = None  # QApplication instance
+_debug = 0
 
 
 try:  # Application path
@@ -23,6 +24,11 @@ try:  # Application path
 except AttributeError:  # interactive interpreter mode
     import os
     app_path = Path(os.getcwd())
+
+
+def debug(*args, flush=True, **kwargs):
+    if _debug:
+        print(*args, **kwargs, flush=flush)
 
 
 def loadUiType(uifile):
@@ -120,7 +126,7 @@ def exec_():
     try:
         sys.exit(app().exec_())
     except SystemExit:
-        print('Exit main loop')
+        debug('Exit main loop')
 
 
 def get_icon(icon):
@@ -175,9 +181,9 @@ class QtApp(QtWidgets.QApplication):
 
     def __init__(self):
         if QtWidgets.QApplication.startingUp():
-            print("Init QApplication instance")
+            debug("Init QApplication instance")
         else:
-            print("Reusing existing QApplication instance")
+            debug("Reusing existing QApplication instance")
         super().__init__(sys.argv)
         if QtCore.QT_VERSION >= 0x50501:
             # http://stackoverflow.com/questions/33736819/pyqt-no-error-msg-traceback-on-exit
@@ -258,7 +264,7 @@ def split_kwargs(kwargs):
 
 
 def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
-           tray=None, splash=None, loop=False, connect=True, **kwargs):
+           tray=None, splash=None, loop=False, connect='after', **kwargs):
     # get arguments from class members: _ArgName_
     flags = getattr(Form, "_flags_", flags)
     ui = getattr(Form, "_ui_", ui)
@@ -288,7 +294,7 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
     if Path(ui_path).exists():
         uic_cls = loadUiType(ui_path)
     else:
-        print("Cannot load UI file", ui_path, flush=True)
+        debug("Cannot load UI file", ui_path)
 
     class QtFormWrapper(Form, *uic_cls):
         def __init__(self, *args, **kwargs):
@@ -309,10 +315,12 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
             self.splashscreen = sp_scr if splash else None
             self.generateElipsisMenus()
             self._connections = []  # list of connections made by `connect_all`
+            if connect == 'before':
+                self.connect_all()  # connect signals and events
             if "__init__" in Form.__dict__:
                 Form.__init__(self, *args, **kwargs)
             self.splashscreen = None  # delete splash screen
-            if connect:
+            if connect == 'after':
                 self.connect_all()  # connect signals and events
 
         def init_tray(self, tray_opts={}):
@@ -338,7 +346,7 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
             Installs event filter if there's /eventFilter/ member.
             Example: def <object>_<signal/slot>():"""
             if self._connections:
-                print("Reconnect all")
+                debug("Reconnect all")
                 for meth, handl in self._connections:
                     meth.disconnect(getattr(self, handl))
                 self._connections = []
@@ -372,9 +380,9 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
                 self.installEventFilter(self)
                 con_evt.append("Event filter")
             if con_sig:
-                print("Signals connected:", ", ".join(con_sig))
+                debug("Signals connected:", ", ".join(con_sig))
             if con_evt:
-                print("Events connected:", ", ".join(con_evt))
+                debug("Events connected:", ", ".join(con_evt))
 
         def generateElipsisMenus(self):
             "Group widgets in 'elipsis_...' layout under ⁞-button menu"
