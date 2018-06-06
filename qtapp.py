@@ -14,7 +14,7 @@ from pathlib import Path
 from qtpy import QtCore, QtGui, QtWidgets, uic
 Qt = QtCore.Qt
 _app = None  # QApplication instance
-_debug = 0
+options = {'skip_missing_resources': False, 'debug': False}
 
 
 try:  # Application path
@@ -27,7 +27,7 @@ except AttributeError:  # interactive interpreter mode
 
 
 def debug(*args, flush=True, **kwargs):
-    if _debug:
+    if options.get('debug'):
         print(*args, **kwargs, flush=flush)
 
 
@@ -99,6 +99,9 @@ def load_qrc(path_qrc, target_path):
 #    if not path_qrc.is_absolute():
 #        path_qrc = target_path.joinpath(path_qrc)
     if not path_qrc.exists():
+        if options.get('skip_missing_resources'):
+            debug("Resource file not found:", path_qrc)
+            return
         raise FileNotFoundError(path_qrc)
     path_pyc = (target_path / ("rc_" + path_qrc.name)).with_suffix(".pyc")
     if not path_pyc.exists() or (path_pyc.stat().st_mtime <

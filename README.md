@@ -18,6 +18,10 @@ Requirements:
 
 Documentation:
 ````
+`options` - `dict` with various options
+  Members:
+  `skip_missing_resources`=False - do not raise error if .qrc-file not found
+  `debug`=False - print various debug messages
 `exec_()` - start main event loop
 `QtApp` - QApplication subclass
   Members:
