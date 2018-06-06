@@ -281,7 +281,16 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
     splash = {'image': splash} if isinstance(splash,
                                              (str, Path)) else splash
     if splash:
-        sp_scr = QtWidgets.QSplashScreen(QtGui.QPixmap(splash['image']))
+        splash_image = QtGui.QPixmap(splash['image'])
+        w, h = splash.get('width'), splash.get('height')
+        if w and not h:
+            h = splash_image.height() * (w / splash_image.width())
+        elif h and not w:
+            w = splash_image.width() * (h / splash_image.height())
+        if w and h:
+            splash_image = splash_image.scaled(w, h)
+        sp_scr = QtWidgets.QSplashScreen(splash_image,
+                                         Qt.WindowStaysOnTopHint)
         sp_scr.show()
         if splash.get('title'):  # Show message
             sp_scr.showMessage(splash['title'],
@@ -414,7 +423,7 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
                 setattr(self, i.objectName(), i)
 
     instance = QtFormWrapper(*args, **kwargs)
-    if show or splash:  # FIXME: splash?
+    if show:
         instance.show()
     if splash:
         sp_scr.close()  # finish(instance)

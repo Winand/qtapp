@@ -36,7 +36,7 @@ Documentation:
                   to `flags`.
   `icon`=None - set window icon: QIcon|QStyle.StandardPixmap|image-path.
                 `SP_TitleBarMenuButton` icon is used by default
-  `show`=True - show window by default. Always True if `splash` provided.
+  `show`=True - show window by default
   `tray`=None - add tray icon: True (use QtForm window icon)|dict
       Arguments:
       {`tip` - tray icon tooltip,
@@ -47,7 +47,9 @@ Documentation:
       {`image` - path to splash screen image file,
        `title`="Loading application..." - caption on the splash screen,
        `align`=Qt.AlignHCenter|Qt.AlignBottom - caption alignment,
-       `color`=Qt.black - caption color}
+       `color`=Qt.black - caption color,
+       `width`, `height`=None - resize image (px), aspect ratio is preserved
+                                if one argument is not specified
   `loop`=False - do not return and start main event loop
   `connect`='after' - call `connect_all()` [before|after] user class
                       initialization or never (False).
