@@ -5,6 +5,7 @@ Created on Thu Nov 30 16:48:55 2017
 @author: МакаровАС
 """
 
+import platform
 import subprocess
 import py_compile
 import sys
@@ -20,11 +21,13 @@ options = {'skip_missing_resources': False, 'debug': False,
 
 try:  # Application path
     import __main__
-    app_path = Path(sys.executable if getattr(sys, 'frozen', False)
-                    else __main__.__file__).parent
+    app_entry = Path(sys.executable if getattr(sys, 'frozen', False)
+                     else __main__.__file__)
+    app_path = app_entry.parent
 except AttributeError:  # interactive interpreter mode
     import os
     app_path = Path(os.getcwd())
+    app_entry = app_path / "<interpreter>"
 
 
 def debug(*args, flush=True, **kwargs):
@@ -226,6 +229,10 @@ class QtApp(QtWidgets.QApplication):
 #        return False, 0
 
         # default window icon
+        if platform.system():  # https://stackoverflow.com/a/27872625/1119602
+            from ctypes import windll
+            windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                str(app_entry))
         self.setWindowIcon(get_icon(QtWidgets.QStyle.SP_TitleBarMenuButton))
 
     def load_resources(self, path):
@@ -267,9 +274,28 @@ def split_kwargs(kwargs):
     return kw, super_kw
 
 
+def show_splashscreen(splash):
+    splash_image = QtGui.QPixmap(splash['image'])
+    w, h = splash.get('width'), splash.get('height')
+    if w and not h:
+        h = splash_image.height() * (w / splash_image.width())
+    elif h and not w:
+        w = splash_image.width() * (h / splash_image.height())
+    if w and h:
+        splash_image = splash_image.scaled(w, h)
+    sp_scr = QtWidgets.QSplashScreen(splash_image, Qt.WindowStaysOnTopHint)
+    sp_scr.show()
+    if splash.get('title'):  # Show message
+        sp_scr.showMessage(splash['title'],
+                           splash.get('align', Qt.AlignHCenter |
+                                               Qt.AlignBottom),
+                           splash.get('color', Qt.black))
+    return sp_scr
+
+
 def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
            tray=None, splash=None, loop=False, connect='after',
-           slot_prefix=None, **kwargs):
+           slot_prefix=None, title=None, **kwargs):
     # get arguments from class members: _ArgName_
     flags = getattr(Form, "_flags_", flags)
     ui = getattr(Form, "_ui_", ui)
@@ -281,28 +307,13 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
     loop = getattr(Form, "_loop_", loop)
     connect = getattr(Form, "_connect_", connect)
     slot_prefix = getattr(Form, "_slot_prefix_", slot_prefix)
+    title = getattr(Form, "_title_", title)
 
     app()  # Init QApplication if needed
 
     splash = {'image': splash} if isinstance(splash,
                                              (str, Path)) else splash
-    if splash:
-        splash_image = QtGui.QPixmap(splash['image'])
-        w, h = splash.get('width'), splash.get('height')
-        if w and not h:
-            h = splash_image.height() * (w / splash_image.width())
-        elif h and not w:
-            w = splash_image.width() * (h / splash_image.height())
-        if w and h:
-            splash_image = splash_image.scaled(w, h)
-        sp_scr = QtWidgets.QSplashScreen(splash_image,
-                                         Qt.WindowStaysOnTopHint)
-        sp_scr.show()
-        if splash.get('title'):  # Show message
-            sp_scr.showMessage(splash['title'],
-                               splash.get('align', Qt.AlignHCenter |
-                                                   Qt.AlignBottom),
-                               splash.get('color', Qt.black))
+    sp_scr = show_splashscreen(splash) if splash else None
     ui_path = str(ui or module_path(Form).joinpath(Form.__name__.lower())
                   ) + ".ui"
     uic_cls = ()
@@ -323,26 +334,29 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
                 self.setupUi(self)
             if icon:
                 self.setWindowIcon(get_icon(icon))
-            if hasattr(self, "tray"):
-                raise(Exception("Widget already has 'tray' attr"))
-            self.init_tray({} if tray is True else tray)
+            if title:
+                self.setWindowTitle(title)
+            if tray is not None:
+                self.init_tray({} if tray is True else tray)
             self.app = app()
-            self.splashscreen = sp_scr if splash else None
+            self.splashscreen = sp_scr
             self.generateElipsisMenus()
             self.set_slot_prefix(slot_prefix or options.get("slot_prefix"))
             self._connections = []  # list of connections made by `connect_all`
-            self.connect_called = False
+            self.__connect_called = False
             if connect == 'before':
                 self.connect_all()  # connect signals and events
             if "__init__" in Form.__dict__:
                 Form.__init__(self, *args, **kwargs)
             self.splashscreen = None  # delete splash screen
-            if connect == 'after' and not self.connect_called:
+            if connect == 'after' and not self.__connect_called:
                 self.connect_all()  # connect signals and events
 
         def init_tray(self, tray_opts={}):
             # Tray icon parent is VERY important:
             # http://python.6.x6.nabble.com/QSystemTrayIcon-still-crashed-app-PyQt4-4-9-1-td4976041.html
+            if hasattr(self, "tray"):
+                raise Exception("Widget already has 'tray' attr")
             if not (tray_opts or isinstance(tray_opts, dict)):
                 self.tray = None  # no tray icon
                 return
@@ -371,7 +385,7 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
             """Connect signals and events to appropriate members.
             Installs event filter if there's /eventFilter/ member.
             Example: def <object>_<signal/slot>():"""
-            self.connect_called = True
+            self.__connect_called = True
             if self._connections:
                 debug("Reconnect all")
                 for meth, handl in self._connections:
