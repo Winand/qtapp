@@ -5,7 +5,6 @@ Created on Thu Nov 30 16:48:55 2017
 @author: МакаровАС
 """
 
-import re
 import subprocess
 import py_compile
 import sys
@@ -16,7 +15,7 @@ from qtpy import QtCore, QtGui, QtWidgets, uic
 Qt = QtCore.Qt
 _app = None  # QApplication instance
 options = {'skip_missing_resources': False, 'debug': False,
-           'slotconvention': "{object}_{signal}"}
+           'slot_prefix': ''}
 
 
 try:  # Application path
@@ -270,7 +269,7 @@ def split_kwargs(kwargs):
 
 def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
            tray=None, splash=None, loop=False, connect='after',
-           slotconvention=None, **kwargs):
+           slot_prefix=None, **kwargs):
     # get arguments from class members: _ArgName_
     flags = getattr(Form, "_flags_", flags)
     ui = getattr(Form, "_ui_", ui)
@@ -281,7 +280,7 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
     splash = getattr(Form, "_splash_", splash)
     loop = getattr(Form, "_loop_", loop)
     connect = getattr(Form, "_connect_", connect)
-    slotconvention = getattr(Form, "_slotconvention_", slotconvention)
+    slot_prefix = getattr(Form, "_slot_prefix_", slot_prefix)
 
     app()  # Init QApplication if needed
 
@@ -330,15 +329,15 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
             self.app = app()
             self.splashscreen = sp_scr if splash else None
             self.generateElipsisMenus()
-            self.set_slotname_convention(slotconvention or
-                                         options.get("slotconvention"))
+            self.set_slot_prefix(slot_prefix or options.get("slot_prefix"))
             self._connections = []  # list of connections made by `connect_all`
+            self.connect_called = False
             if connect == 'before':
                 self.connect_all()  # connect signals and events
             if "__init__" in Form.__dict__:
                 Form.__init__(self, *args, **kwargs)
             self.splashscreen = None  # delete splash screen
-            if connect == 'after':
+            if connect == 'after' and not self.connect_called:
                 self.connect_all()  # connect signals and events
 
         def init_tray(self, tray_opts={}):
@@ -359,24 +358,20 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
             # trayicon stops working
     #        QtGui.qApp.setQuitOnLastWindowClosed(False)
 
-        def set_slotname_convention(self, re_str):
-            try:
-                if not re_str.format(object="A", signal="B").isidentifier():
-                    raise Exception("Provided pattern '%s' cannot be used "
-                                    "for python identifiers" % re_str)
-            except KeyError:
-                raise Exception("Provide both {object} and {signal} fields")
-            py2_ident = "[a-zA-Z_][a-zA-Z0-9_]*"
-            field_tpl = "(?P<{field}>{ident})"
-            obj_field = field_tpl.format(field="object", ident=py2_ident)
-            meth_field = field_tpl.format(field="signal", ident=py2_ident)
-            self.slots_re = re.compile(re_str.format(object=obj_field,
-                                                     signal=meth_field))
+        def set_slot_prefix(self, prefix):
+            if not prefix:
+                self.slot_prefix = ""
+                return
+            if not prefix.isidentifier():
+                    raise Exception("Provided prefix '%s' is not a valid "
+                                    "Python identifier" % prefix)
+            self.slot_prefix = prefix + "_"
 
         def connect_all(self):
             """Connect signals and events to appropriate members.
             Installs event filter if there's /eventFilter/ member.
             Example: def <object>_<signal/slot>():"""
+            self.connect_called = True
             if self._connections:
                 debug("Reconnect all")
                 for meth, handl in self._connections:
@@ -394,13 +389,9 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
                                               QtCore.QMetaMethod.Signal)
 #                print(i, signals)
                 for m in members:
-                    match = self.slots_re.fullmatch(m)
-                    if not match:
+                    if not m.startswith(self.slot_prefix + i):
                         continue
-                    d = match.groupdict()
-                    if d.get("object") != i:
-                        continue
-                    meth_name = d.get("signal")
+                    meth_name = m[len(self.slot_prefix) + len(i) + 1:]
                     method = getattr(widgets[i], meth_name, None)
                     if not method:
                         print("Method '%s' of '%s' not found" % (meth_name, i))

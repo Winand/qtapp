@@ -22,8 +22,7 @@ Documentation:
   Members:
   `skip_missing_resources`=False - do not raise error if .qrc-file not found
   `debug`=False - print various debug messages
-  `slotconvention`="{object}_{signal}" - function pattern to connect signals to
-                                         It must include {object} and {signal}.
+  `slot_prefix`="" - slot name prefix, see `connect_all`
 `exec_()` - start main event loop
 `QtApp` - QApplication subclass
   Members:
@@ -58,9 +57,9 @@ Documentation:
                                 if one argument is not specified
   `loop`=False - do not return and start main event loop
   `connect`='after' - call `connect_all()` [before|after] user class
-                      initialization or never (False).
-  `slotconvention`=options['slotconvention'] - slot name convention for
-                                               current window class
+                      initialization or never (False). 'after' is ignored if a
+                      user calls the function manually.
+  `slot_prefix`=options['slot_prefix'] - slot name prefix for QtForm subclass
   `**kwargs`=() - additional keyword arguments for user class `__init__`.
                   To pass additional arguments to base class `__init__` use
                   keywords with `_super` postfix.
@@ -69,10 +68,11 @@ Documentation:
   `tray` - `QSystemTrayIcon` if created or None
       Members:
       `addMenuItem(name1, func1, ...)` - add 1 or more context menu items
-  `connect_all()` - connects events and signals to appropriate members,
-                    see options.`slotconvention`, special: def eventFilter(...)
-                    Note: Use `{object}`="self" for `QtForm` signal handlers.
-                          Event handlers can be reimplemented directly.
+  `connect_all()` - connects events and signals to appropriate members:
+                    [prefix_]object_signal (special: `eventFilter`)
+              Note: Use object="self" for `QtForm` signal handlers.
+                    Its event handlers can be reimplemented directly.
+          See also: http://stackoverflow.com/q/48027254
   `init_tray()` - init. tray icon manually, see `tray` arg. of `QtForm`
   `splashscreen` - `QSplashScreen` if created or None. After _init_ it's None
 ````
