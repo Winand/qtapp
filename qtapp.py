@@ -131,7 +131,11 @@ def exec_():
     "Start main event loop after QApplication initialization"
 #    del app().form  # ...or you WILL fail. One day.
     try:
-        sys.exit(app().exec_())
+        ret = app().exec_()
+        if ret == -1:
+            debug('Application loop is already running')
+            return
+        sys.exit(ret)
     except SystemExit:
         debug('Exit main loop')
 
@@ -229,7 +233,8 @@ class QtApp(QtWidgets.QApplication):
 #        return False, 0
 
         # default window icon
-        if platform.system():  # https://stackoverflow.com/a/27872625/1119602
+        if platform.system() == "Windows":
+            # https://stackoverflow.com/a/27872625/1119602
             from ctypes import windll
             windll.shell32.SetCurrentProcessExplicitAppUserModelID(
                 str(app_entry))
@@ -274,6 +279,11 @@ def split_kwargs(kwargs):
     return kw, super_kw
 
 
+def first_val(*args):
+    "Returns first not None value or None"
+    return next((item for item in args if item is not None), None)
+
+
 def show_splashscreen(splash):
     splash_image = QtGui.QPixmap(splash['image'])
     w, h = splash.get('width'), splash.get('height')
@@ -293,21 +303,21 @@ def show_splashscreen(splash):
     return sp_scr
 
 
-def QtForm(Form, *args, flags=None, ui=None, ontop=False, show=True, icon=None,
-           tray=None, splash=None, loop=False, connect='after',
+def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
+           tray=None, splash=None, loop=None, connect=None,
            slot_prefix=None, title=None, **kwargs):
     # get arguments from class members: _ArgName_
-    flags = getattr(Form, "_flags_", flags)
-    ui = getattr(Form, "_ui_", ui)
-    ontop = getattr(Form, "_ontop_", ontop)
-    show = getattr(Form, "_show_", show)
-    icon = getattr(Form, "_icon_", icon)
-    tray = getattr(Form, "_tray_", tray)
-    splash = getattr(Form, "_splash_", splash)
-    loop = getattr(Form, "_loop_", loop)
-    connect = getattr(Form, "_connect_", connect)
-    slot_prefix = getattr(Form, "_slot_prefix_", slot_prefix)
-    title = getattr(Form, "_title_", title)
+    flags = first_val(flags, getattr(Form, "_flags_", None))
+    ui = first_val(ui, getattr(Form, "_ui_", None))
+    ontop = first_val(ontop, getattr(Form, "_ontop_", None)) or False
+    show = first_val(show, getattr(Form, "_show_", None)) or True
+    icon = first_val(icon, getattr(Form, "_icon_", None))
+    tray = first_val(tray, getattr(Form, "_tray_", None))
+    splash = first_val(splash, getattr(Form, "_splash_", None))
+    loop = first_val(loop, getattr(Form, "_loop_", None)) or False
+    connect = first_val(connect, getattr(Form, "_connect_", None)) or 'after'
+    slot_prefix = first_val(slot_prefix, getattr(Form, "_slot_prefix_", None))
+    title = first_val(title, getattr(Form, "_title_", None))
 
     app()  # Init QApplication if needed
 
