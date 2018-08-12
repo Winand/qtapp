@@ -127,19 +127,6 @@ def app():
     return _app
 
 
-def exec_():
-    "Start main event loop after QApplication initialization"
-#    del app().form  # ...or you WILL fail. One day.
-    try:
-        ret = app().exec_()
-        if ret == -1:
-            debug('Application loop is already running')
-            return
-        sys.exit(ret)
-    except SystemExit:
-        debug('Exit main loop')
-
-
 def get_icon(icon):
     "icon - QIcon|QStyle.StandardPixmap|image-path"
     if isinstance(icon, QtGui.QIcon):
@@ -255,6 +242,18 @@ class QtApp(QtWidgets.QApplication):
             self.wheel.emit(obj, delta > 0)
         return False
 
+    def exec(self):
+        "Start main event loop after QApplication initialization"
+        try:
+            # https://stackoverflow.com/a/22614643/1119602
+            ret = super().exec()
+            if ret == -1:
+                debug('Application loop is already running')
+                return
+            sys.exit(ret)
+        except SystemExit:
+            debug('Exit main loop')
+
 
 def module_path(cls):
     "Get module folder path from class"
@@ -319,13 +318,15 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
     slot_prefix = first_val(slot_prefix, getattr(Form, "_slot_prefix_", None))
     title = first_val(title, getattr(Form, "_title_", None))
 
+    # Note: do not store widget ref. in QtApp instance or del. it before exit
     app()  # Init QApplication if needed
 
     splash = {'image': splash} if isinstance(splash,
                                              (str, Path)) else splash
     sp_scr = show_splashscreen(splash) if splash else None
-    ui_path = str(ui or module_path(Form).joinpath(Form.__name__.lower())
-                  ) + ".ui"
+    ui_path = str(ui or module_path(Form).joinpath(Form.__name__.lower()))
+    if not ui_path.lower().endswith(".ui"):
+        ui_path += ".ui"
     uic_cls = ()
     if Path(ui_path).exists():
         uic_cls = loadUiType(ui_path)
@@ -472,7 +473,7 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
     if splash:
         sp_scr.close()  # finish(instance)
     if loop:
-        exec_()
+        app().exec()
     return instance
 
 

@@ -23,11 +23,11 @@ Documentation:
   `skip_missing_resources`=False - do not raise error if .qrc-file not found
   `debug`=False - print various debug messages
   `slot_prefix`="" - slot name prefix, see `connect_all`
-`exec_()` - start main event loop
 `QtApp` - QApplication subclass
   Members:
   `path` - application path
   `load_resources` - load specified .qrc-file
+  `exec()` - start main event loop
 `app()` - `QtApp` instance, creates a new one on 1st call
 `QtForm()` - create new Qt window (and `QtApp` instance if needed). Arguments
              can be provided in variables of user class: _argname_ = value
@@ -36,7 +36,8 @@ Documentation:
            super class [QDialog|QWidget|QMainWindow] if ui-file is not used)
   `*args`=() - additional arguments for user class `__init__`
   `flags`=None - Qt.WindowFlags
-  `ui`=None - path to .ui-file, if `None` try lowercase name of `Form` class
+  `ui`=None - path to .ui-file (w/ or w/o file extension),
+              if `None` try lowercase name of `Form` class.
   `ontop`=False - show window always on top, adds `WindowStaysOnTopHint` flag
                   to `flags`.
   `icon`=None - set window icon: QIcon|QStyle.StandardPixmap|image-path.
