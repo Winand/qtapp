@@ -77,4 +77,5 @@ Documentation:
           See also: http://stackoverflow.com/q/48027254
   `init_tray()` - init. tray icon manually, see `tray` arg. of `QtForm`
   `splashscreen` - `QSplashScreen` if created or None. After _init_ it's None
+  `setTopmost`/`isTopmost` - put window on top of all other windows
 ````

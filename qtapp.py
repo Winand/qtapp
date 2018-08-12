@@ -302,6 +302,29 @@ def show_splashscreen(splash):
     return sp_scr
 
 
+def QTBUG_50271(widget):
+    # Sync actual behaviour with WindowStaysOnTopHint flag
+    # https://bugreports.qt.io/browse/QTBUG-50271
+    # https://stackoverflow.com/questions/51802118
+    if platform.system() != "Windows":
+        return
+    import ctypes
+    user32 = ctypes.windll.user32
+    GWL_EXSTYLE = -20
+    WS_EX_TOPMOST = 8
+    HWND_TOPMOST, HWND_NOTOPMOST = -1, -2
+    SWP_NOSIZE, SWP_NOMOVE = 1, 2
+    is_topmost = user32.GetWindowLongW(int(widget.winId()),
+                                        GWL_EXSTYLE) & WS_EX_TOPMOST \
+                                        == WS_EX_TOPMOST
+    b = widget.windowFlags() & Qt.WindowStaysOnTopHint == \
+        Qt.WindowStaysOnTopHint
+    if b != is_topmost:
+        flag = HWND_TOPMOST if b else HWND_NOTOPMOST
+        user32.SetWindowPos(int(widget.winId()), flag, 0, 0, 0, 0,
+                            SWP_NOSIZE | SWP_NOMOVE)
+
+
 def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
            tray=None, splash=None, loop=None, connect=None,
            slot_prefix=None, title=None, **kwargs):
@@ -341,6 +364,7 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
             if flags_:
                 super_kwargs['flags'] = Qt.WindowFlags(flags_)
             super(Form, self).__init__(**super_kwargs)
+            QTBUG_50271(self)  # topmost
             if hasattr(self, "setupUi"):  # init `loadUiType` generated class
                 self.setupUi(self)
             if icon:
@@ -466,6 +490,26 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
                     elipsis_btns.append(elipsis_btn)
             for i in elipsis_btns:
                 setattr(self, i.objectName(), i)
+
+        def setTopmost(self, b=True):
+            was_visible = self.isVisible()
+            if was_visible:
+                # `setWindowFlags` resets size if setGeometry was never called
+                self.setGeometry(self.geometry())
+            try:  # Qt>=5.9
+                self.setWindowFlag(Qt.WindowStaysOnTopHint, b)
+            except AttributeError:
+                flags = self.windowFlags()
+                self.setWindowFlags((flags | Qt.WindowStaysOnTopHint)
+                                    if b else
+                                    (flags & ~Qt.WindowStaysOnTopHint))
+            if was_visible:
+                self.show()
+            QTBUG_50271(self)  # topmost
+
+        def isTopmost(self):
+            return self.windowFlags() & Qt.WindowStaysOnTopHint == \
+                Qt.WindowStaysOnTopHint
 
     instance = QtFormWrapper(*args, **kwargs)
     if show:
