@@ -3,3 +3,6 @@ TODO (maybe)
 * redirect `stdout` to a widget
 * cache ui files
 * modal dialogs with returned values
+* "sticky" windows
+* draggable windows
+* clearly state that one needs .ui or base class (or add QWidget base silently)

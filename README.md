@@ -62,6 +62,7 @@ Documentation:
                       user calls the function manually.
   `slot_prefix`=options['slot_prefix'] - slot name prefix for QtForm subclass
   `title`=None - set window title
+  `layout`=None - set layout of a specified `QLayout` subclass to the widget
   `**kwargs`=() - additional keyword arguments for user class `__init__`.
                   To pass additional arguments to base class `__init__` use
                   keywords with `_super` postfix.

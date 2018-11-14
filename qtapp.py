@@ -327,7 +327,7 @@ def QTBUG_50271(widget):
 
 def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
            tray=None, splash=None, loop=None, connect=None,
-           slot_prefix=None, title=None, **kwargs):
+           slot_prefix=None, title=None, layout=None, **kwargs):
     # get arguments from class members: _ArgName_
     flags = first_val(flags, getattr(Form, "_flags_", None))
     ui = first_val(ui, getattr(Form, "_ui_", None))
@@ -340,6 +340,7 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
     connect = first_val(connect, getattr(Form, "_connect_", None)) or 'after'
     slot_prefix = first_val(slot_prefix, getattr(Form, "_slot_prefix_", None))
     title = first_val(title, getattr(Form, "_title_", None))
+    layout = first_val(layout, getattr(Form, "_layout_", None))
 
     # Note: do not store widget ref. in QtApp instance or del. it before exit
     app()  # Init QApplication if needed
@@ -367,6 +368,10 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
             QTBUG_50271(self)  # topmost
             if hasattr(self, "setupUi"):  # init `loadUiType` generated class
                 self.setupUi(self)
+                if layout:
+                    raise Exception("Cannot use layout and UI file")
+            if issubclass(layout, QtWidgets.QLayout):
+                layout(self)
             if icon:
                 self.setWindowIcon(get_icon(icon))
             if title:
@@ -412,8 +417,8 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
                 self.slot_prefix = ""
                 return
             if not prefix.isidentifier():
-                    raise Exception("Provided prefix '%s' is not a valid "
-                                    "Python identifier" % prefix)
+                raise Exception("Provided prefix '%s' is not a valid "
+                                "Python identifier" % prefix)
             self.slot_prefix = prefix + "_"
 
         def connect_all(self):
