@@ -192,11 +192,14 @@ class QtApp(QtWidgets.QApplication):
 #        with contextlib.suppress(pywintypes.error):
 #            win32gui.EnumWindows(self.findMsgDispatcher, self.applicationPid())
 
-        def sigint(*args):  # pass all KeyboardInterrupt to Python code
-            self.terminated.emit()
-            self.quit()
-#            raise KeyboardInterrupt
-        signal.signal(signal.SIGINT, sigint)
+        # Pass all KeyboardInterrupt to Python code
+        signal.signal(signal.SIGINT, self.on_sigint)
+        # Notify about SIGINT even if application's window is not in focus
+        # https://machinekoder.com/how-to-not-shoot-yourself-in-the-foot-using-python-qt/
+        self.timer_eventloop = QtCore.QTimer()
+        self.timer_eventloop.timeout.connect(lambda: None)
+        self.timer_eventloop.start(100)
+
         global _app
         _app = self
         self.path = app_path  # Application path
@@ -241,6 +244,13 @@ class QtApp(QtWidgets.QApplication):
                 else event.delta()
             self.wheel.emit(obj, delta > 0)
         return False
+
+    def on_sigint(self, *args):
+        "Actions performed on SIGINT (Ctrl+C)"
+        debug('SIGINT received', args)
+        self.terminated.emit()
+        self.quit()
+        # raise KeyboardInterrupt
 
     def exec(self):
         "Start main event loop after QApplication initialization"
@@ -365,12 +375,11 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
             if flags_:
                 super_kwargs['flags'] = Qt.WindowFlags(flags_)
             super(Form, self).__init__(**super_kwargs)
-            QTBUG_50271(self)  # topmost
             if hasattr(self, "setupUi"):  # init `loadUiType` generated class
                 self.setupUi(self)
                 if layout:
                     raise Exception("Cannot use layout and UI file")
-            if issubclass(layout, QtWidgets.QLayout):
+            if layout and issubclass(layout, QtWidgets.QLayout):
                 layout(self)
             if icon:
                 self.setWindowIcon(get_icon(icon))
@@ -391,6 +400,7 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
             self.splashscreen = None  # delete splash screen
             if connect == 'after' and not self.__connect_called:
                 self.connect_all()  # connect signals and events
+            QTBUG_50271(self)  # topmost
 
         def init_tray(self, tray_opts={}):
             # Tray icon parent is VERY important:

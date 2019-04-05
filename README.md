@@ -28,6 +28,9 @@ Documentation:
   `path` - application path
   `load_resources` - load specified .qrc-file
   `exec()` - start main event loop
+  [signal] `terminated` - application is terminated with Ctrl+C (SIGINT)
+  [signal] `deactivated` - application lost focus
+  [signal] `wheel(widget, direction)` - mouse wheel event over a `widget`
 `app()` - `QtApp` instance, creates a new one on 1st call
 `QtForm()` - create new Qt window (and `QtApp` instance if needed). Arguments
              can be provided in variables of user class: _argname_ = value
