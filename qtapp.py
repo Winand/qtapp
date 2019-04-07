@@ -90,11 +90,15 @@ def compile_qrc(path_qrc, path_dst: Path):
     target_path = path_dst.parent
     path_py = target_path / "_temp_rc_.py" \
         if path_dst.suffix.lower() == ".pyc" else path_dst
-    if subprocess.call(['pyrcc5', '-o', str(path_py), str(path_qrc)]):
-        raise Exception("Failed to compile resource file " + str(path_qrc))
+    args = ['-o', str(path_py), str(path_qrc)]
+    try:  # exe->bat https://www.riverbankcomputing.com/pipermail/pyqt/2017-January/038529.html
+        result = subprocess.run(['pyrcc5'] + args, check=True)
+    except FileNotFoundError:
+        result = subprocess.run(['pyrcc5.bat'] + args, check=True)
     if path_dst.suffix.lower() == ".pyc":  # compile to .pyc
         py_compile.compile(str(path_py), cfile=str(path_dst), doraise=True)
         path_py.unlink()
+    debug("Resource file %s compiled" % path_qrc)
 
 
 def load_qrc(path_qrc, target_path):
@@ -247,7 +251,7 @@ class QtApp(QtWidgets.QApplication):
 
     def on_sigint(self, *args):
         "Actions performed on SIGINT (Ctrl+C)"
-        debug('SIGINT received', args)
+        debug('SIGINT received')
         self.terminated.emit()
         self.quit()
         # raise KeyboardInterrupt
