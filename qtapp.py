@@ -12,7 +12,7 @@ import sys
 import traceback
 import signal
 from pathlib import Path
-from qtpy import QtCore, QtGui, QtWidgets, uic
+from qtpy import QtCore, QtGui, QtWidgets, uic, PYQT4
 Qt = QtCore.Qt
 _app = None  # QApplication instance
 options = {'skip_missing_resources': False, 'debug': False,
@@ -85,16 +85,30 @@ def parse_ui(uifile):
     return ret
 
 
+def subprocess_run(args):
+    "Runs a command, raises exception on error, returns nothing"
+    if hasattr(subprocess, 'run'):  # py3.5+
+        subprocess.run(args, check=True)
+    else:
+        rc = subprocess.call(args)
+        if rc:
+            raise subprocess.CalledProcessError(rc, args)
+
+
 def compile_qrc(path_qrc, path_dst: Path):
     "Compile .qrc file to .py then optionally to .pyc"
     target_path = path_dst.parent
     path_py = target_path / "_temp_rc_.py" \
         if path_dst.suffix.lower() == ".pyc" else path_dst
     args = ['-o', str(path_py), str(path_qrc)]
-    try:  # exe->bat https://www.riverbankcomputing.com/pipermail/pyqt/2017-January/038529.html
-        result = subprocess.run(['pyrcc5'] + args, check=True)
-    except FileNotFoundError:
-        result = subprocess.run(['pyrcc5.bat'] + args, check=True)
+    if PYQT4:
+        # https://riverbankcomputing.com/pipermail/pyqt/2010-December/028669.html
+        subprocess_run(['pyrcc4', '-py3'] + args)
+    else:  # exe->bat https://www.riverbankcomputing.com/pipermail/pyqt/2017-January/038529.html
+        try:
+            subprocess_run(['pyrcc5'] + args)
+        except FileNotFoundError:
+            subprocess_run(['pyrcc5.bat'] + args)
     if path_dst.suffix.lower() == ".pyc":  # compile to .pyc
         py_compile.compile(str(path_py), cfile=str(path_dst), doraise=True)
         path_py.unlink()
@@ -118,7 +132,7 @@ def load_qrc(path_qrc, target_path):
     try:
         import_file(str(path_pyc))
     except ImportError:  # try to rebuild resource file
-        print("Failed to load resource file. Rebuilding...")
+        print("Failed to load resource file %s. Rebuilding..." % path_pyc)
         compile_qrc(path_qrc, path_pyc)
         import_file(str(path_pyc))
 
