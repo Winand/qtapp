@@ -12,12 +12,13 @@ import sys
 import traceback
 import signal
 from pathlib import Path
-from qtpy import QtCore, QtGui, QtWidgets, uic, PYQT4
+from qtpy import QtCore, QtGui, QtWidgets, uic
+from qtpy import API as Qt_API, LooseVersion as ver, QT_VERSION
 Qt = QtCore.Qt
 _app = None  # QApplication instance
 options = {'skip_missing_resources': False, 'debug': False,
            'slot_prefix': ''}
-
+FLAGS_KW = 'flags' if Qt_API.startswith('pyqt') else 'f' # QWidget init arg
 
 try:  # Application path
     import __main__
@@ -101,7 +102,7 @@ def compile_qrc(path_qrc, path_dst: Path):
     path_py = target_path / "_temp_rc_.py" \
         if path_dst.suffix.lower() == ".pyc" else path_dst
     args = ['-o', str(path_py), str(path_qrc)]
-    if PYQT4:
+    if ver(QT_VERSION) < "5":
         # https://riverbankcomputing.com/pipermail/pyqt/2010-December/028669.html
         subprocess_run(['pyrcc4', '-py3'] + args)
     else:  # exe->bat https://www.riverbankcomputing.com/pipermail/pyqt/2017-January/038529.html
@@ -201,7 +202,7 @@ class QtApp(QtWidgets.QApplication):
         else:
             debug("Reusing existing QApplication instance")
         super().__init__(sys.argv)
-        if QtCore.QT_VERSION >= 0x50501:
+        if ver(QT_VERSION) >= "5.5.1":
             # http://stackoverflow.com/questions/33736819/pyqt-no-error-msg-traceback-on-exit
             def excepthook(type_, value, traceback_):
                 traceback.print_exception(type_, value, traceback_)
@@ -274,7 +275,7 @@ class QtApp(QtWidgets.QApplication):
         "Start main event loop after QApplication initialization"
         try:
             # https://stackoverflow.com/a/22614643/1119602
-            ret = super().exec()
+            ret = super().exec_()  # there's no `exec` in PySide
             if ret == -1:
                 debug('Application loop is already running')
                 return
@@ -391,7 +392,7 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
                       (Qt.WindowStaysOnTopHint if ontop else 0))
             kwargs, super_kwargs = split_kwargs(kwargs)
             if flags_:
-                super_kwargs['flags'] = Qt.WindowFlags(flags_)
+                super_kwargs[FLAGS_KW] = Qt.WindowFlags(flags_)
             super(Form, self).__init__(**super_kwargs)
             if hasattr(self, "setupUi"):  # init `loadUiType` generated class
                 self.setupUi(self)
