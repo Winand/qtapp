@@ -12,6 +12,7 @@ import sys
 import traceback
 import signal
 from pathlib import Path
+from types import SimpleNamespace
 from qtpy import QtCore, QtGui, QtWidgets, uic
 from qtpy import API as Qt_API, LooseVersion as ver, QT_VERSION
 Qt = QtCore.Qt
@@ -309,6 +310,23 @@ def split_kwargs(kwargs):
     return kw, super_kw
 
 
+def generate_widget_class(Cls, Ui_Cls, init_args):
+    """
+    Generates a class based on `Cls`, `WidgetTemplate` and `QWidget` if needed
+    `Ui_Cls` - None or tuple of classes returned by `loadUiType`
+    `init_args` - `SimpleNamespace` arguments object. It is set as a variable
+                  of the generated class 
+    """
+    bases = QtFormWrapper, Cls
+    if Ui_Cls:
+        bases += Ui_Cls
+    if not (Ui_Cls or issubclass(Cls, QtWidgets.QWidget)):
+        bases += QtWidgets.QWidget,
+    Generated_Cls = type("%s__Wrapper" % Cls.__name__, bases, {})
+    Generated_Cls.init_args = init_args
+    return Generated_Cls
+
+
 def first_val(*args):
     "Returns first not None value or None"
     return next((item for item in args if item is not None), None)
@@ -327,8 +345,8 @@ def show_splashscreen(splash):
     sp_scr.show()
     if splash.get('title'):  # Show message
         sp_scr.showMessage(splash['title'],
-                           splash.get('align', Qt.AlignHCenter |
-                                               Qt.AlignBottom),
+                           splash.get('align',
+                                      Qt.AlignHCenter | Qt.AlignBottom),
                            splash.get('color', Qt.black))
     return sp_scr
 
@@ -360,26 +378,29 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
            tray=None, splash=None, loop=None, connect=None,
            slot_prefix=None, title=None, layout=None, **kwargs):
     # get arguments from class members: _ArgName_
-    flags = first_val(flags, getattr(Form, "_flags_", None))
-    ui = first_val(ui, getattr(Form, "_ui_", None))
-    ontop = first_val(ontop, getattr(Form, "_ontop_", None)) or False
-    show = first_val(show, getattr(Form, "_show_", None)) or True
-    icon = first_val(icon, getattr(Form, "_icon_", None))
-    tray = first_val(tray, getattr(Form, "_tray_", None))
-    splash = first_val(splash, getattr(Form, "_splash_", None))
-    loop = first_val(loop, getattr(Form, "_loop_", None)) or False
-    connect = first_val(connect, getattr(Form, "_connect_", None)) or 'after'
-    slot_prefix = first_val(slot_prefix, getattr(Form, "_slot_prefix_", None))
-    title = first_val(title, getattr(Form, "_title_", None))
-    layout = first_val(layout, getattr(Form, "_layout_", None))
-
+    getatt = lambda name: getattr(Form, name, None)
+    opt = SimpleNamespace(
+        flags=first_val(flags, getatt("_flags_")),
+        ui=first_val(ui, getatt("_ui_")),
+        ontop=first_val(ontop, getatt("_ontop_")) or False,
+        show=first_val(show, getatt("_show_")) or True,
+        icon=first_val(icon, getatt("_icon_")),
+        tray=first_val(tray, getatt("_tray_")),
+        splash=first_val(splash, getatt("_splash_")) or {},
+        loop=first_val(loop, getatt("_loop_")) or False,
+        connect=first_val(connect, getatt("_connect_")) or 'after',
+        slot_prefix=first_val(slot_prefix, getatt("_slot_prefix_")),
+        title=first_val(title, getatt("_title_")),
+        layout=first_val(layout, getatt("_layout_")),
+    )
     # Note: do not store widget ref. in QtApp instance or del. it before exit
     app()  # Init QApplication if needed
 
-    splash = {'image': splash} if isinstance(splash,
-                                             (str, Path)) else splash
-    sp_scr = show_splashscreen(splash) if splash else None
-    ui_path = str(ui or module_path(Form).joinpath(Form.__name__.lower()))
+    if opt.splash:  # Show splashscreen
+        if isinstance(opt.splash, (str, Path)):
+            opt.splash = {'image': opt.splash}
+        opt.splash['sp_scr'] = show_splashscreen(opt.splash)
+    ui_path = str(opt.ui or module_path(Form).joinpath(Form.__name__.lower()))
     if not ui_path.lower().endswith(".ui"):
         ui_path += ".ui"
     uic_cls = ()
@@ -387,174 +408,178 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
         uic_cls = loadUiType(ui_path)
     else:
         debug("Cannot load UI file", ui_path)
-
-    class QtFormWrapper(Form, *uic_cls):
-        def __init__(self, *args, **kwargs):
-            flags_ = (Qt.WindowFlags(flags or 0) |
-                      (Qt.WindowStaysOnTopHint if ontop else 0))
-            kwargs, super_kwargs = split_kwargs(kwargs)
-            if flags_:
-                super_kwargs[FLAGS_KW] = Qt.WindowFlags(flags_)
-            super(Form, self).__init__(**super_kwargs)
-            if hasattr(self, "setupUi"):  # init `loadUiType` generated class
-                self.setupUi(self)
-                if layout:
-                    raise Exception("Cannot use layout and UI file")
-            if layout and issubclass(layout, QtWidgets.QLayout):
-                layout(self)
-            if icon:
-                self.setWindowIcon(get_icon(icon))
-            if title:
-                self.setWindowTitle(title)
-            if tray is not None:
-                self.init_tray({} if tray is True else tray)
-            self.app = app()
-            self.splashscreen = sp_scr
-            self.generateElipsisMenus()
-            self.set_slot_prefix(slot_prefix or options.get("slot_prefix"))
-            self._connections = []  # list of connections made by `connect_all`
-            self.__connect_called = False
-            if connect == 'before':
-                self.connect_all()  # connect signals and events
-            if "__init__" in Form.__dict__:
-                Form.__init__(self, *args, **kwargs)
-            self.splashscreen = None  # delete splash screen
-            if connect == 'after' and not self.__connect_called:
-                self.connect_all()  # connect signals and events
-            QTBUG_50271(self)  # topmost
-
-        def init_tray(self, tray_opts={}):
-            # Tray icon parent is VERY important:
-            # http://python.6.x6.nabble.com/QSystemTrayIcon-still-crashed-app-PyQt4-4-9-1-td4976041.html
-            if hasattr(self, "tray"):
-                raise Exception("Widget already has 'tray' attr")
-            if not (tray_opts or isinstance(tray_opts, dict)):
-                self.tray = None  # no tray icon
-                return
-            if 'icon' not in tray_opts:  # get from window
-                tray_opts["icon"] = self.windowIcon()
-            self.tray = SystemTrayIcon(get_icon(tray_opts["icon"]), self)
-            if 'tip' in tray_opts:
-                self.tray.setToolTip(tray_opts['tip'])
-            # Qt doc:"The system tray icon does not take ownership of the menu"
-            self.tray.setContextMenu(QtWidgets.QMenu(self))
-            self.tray.show()
-            # important! open qdialog, hide main window, close qdialog:
-            # trayicon stops working
-    #        QtGui.qApp.setQuitOnLastWindowClosed(False)
-
-        def set_slot_prefix(self, prefix):
-            if not prefix:
-                self.slot_prefix = ""
-                return
-            if not prefix.isidentifier():
-                raise Exception("Provided prefix '%s' is not a valid "
-                                "Python identifier" % prefix)
-            self.slot_prefix = prefix + "_"
-
-        def connect_all(self):
-            """Connect signals and events to appropriate members.
-            Installs event filter if there's /eventFilter/ member.
-            Example: def <object>_<signal/slot>():"""
-            self.__connect_called = True
-            if self._connections:
-                debug("Reconnect all")
-                for meth, handl in self._connections:
-                    meth.disconnect(getattr(self, handl))
-                self._connections = []
-            widgets, members = super().__dict__.copy(), Form.__dict__
-            widgets['self'] = self
-#            print(widgets)
-            con_sig, con_evt = [], []
-            for i in widgets:
-                if not hasattr(widgets[i], 'metaObject') or \
-                        callable(widgets[i]):  # FIXME: why callables(?)
-                    continue  # FIXME: redirect stdout closeEvent(?)
-                signals = _get_object_methods(widgets[i],
-                                              QtCore.QMetaMethod.Signal)
-#                print(i, signals)
-                for m in members:
-                    if not m.startswith(self.slot_prefix + i):
-                        continue
-                    meth_name = m[len(self.slot_prefix) + len(i) + 1:]
-                    method = getattr(widgets[i], meth_name, None)
-                    if not method:
-                        print("Method '%s' of '%s' not found" % (meth_name, i))
-                        continue
-                    binded_method = getattr(self, m)
-                    if meth_name in signals:
-                        method.connect(binded_method)
-                        # save names instead of refs or will crash on app.quit
-                        self._connections.append((method, m))
-                        con_sig.append("%s.%s" % (i, meth_name))
-                    else:  # assume it's an event  # elif i != 'self'
-                        setattr(widgets[i], meth_name, binded_method)
-                        con_evt.append("%s.%s" % (i, meth_name))
-            if "eventFilter" in members:
-                self.installEventFilter(self)
-                con_evt.append("Event filter")
-            if con_sig:
-                debug("Signals connected:", ", ".join(con_sig))
-            if con_evt:
-                debug("Events connected:", ", ".join(con_evt))
-
-        def generateElipsisMenus(self):
-            "Group widgets in 'elipsis_...' layout under ⁞-button menu"
-            widgets, elipsis_btns = super().__dict__, []
-            for i in widgets:
-                if i.startswith('elipsis_'):
-                    elipsis = widgets[i]
-                    if not isinstance(elipsis, QtWidgets.QLayout):
-                        continue
-                    menu = QtWidgets.QMenu()
-                    wgts = [elipsis.itemAt(j).widget()
-                            for j in range(elipsis.count())]
-                    for wgt in wgts:
-                        act_wgt = QtWidgets.QWidgetAction(menu)
-                        act_wgt.setDefaultWidget(wgt)
-                        menu.addAction(act_wgt)
-                    elipsis_btn = QtWidgets.QToolButton(self)
-                    elipsis_btn.setAutoRaise(True)
-                    elipsis_btn.setStyleSheet(
-                        "QToolButton:menu-indicator{image:none}")
-                    elipsis_btn.setText("⁞")  # ⋮
-                    elipsis_btn.setFont(QtGui.QFont('Arial Unicode MS', 9))
-                    elipsis_btn.setPopupMode(elipsis_btn.InstantPopup)
-                    elipsis.addWidget(elipsis_btn)
-                    elipsis_btn.setMenu(menu)
-                    elipsis_btn.setObjectName('elipsisbtn_'+i[8:])
-                    elipsis_btns.append(elipsis_btn)
-            for i in elipsis_btns:
-                setattr(self, i.objectName(), i)
-
-        def setTopmost(self, b=True):
-            was_visible = self.isVisible()
-            if was_visible:
-                # `setWindowFlags` resets size if setGeometry was never called
-                self.setGeometry(self.geometry())
-            try:  # Qt>=5.9
-                self.setWindowFlag(Qt.WindowStaysOnTopHint, b)
-            except AttributeError:
-                flags = self.windowFlags()
-                self.setWindowFlags((flags | Qt.WindowStaysOnTopHint)
-                                    if b else
-                                    (flags & ~Qt.WindowStaysOnTopHint))
-            if was_visible:
-                self.show()
-            QTBUG_50271(self)  # topmost
-
-        def isTopmost(self):
-            return self.windowFlags() & Qt.WindowStaysOnTopHint == \
-                Qt.WindowStaysOnTopHint
-
-    instance = QtFormWrapper(*args, **kwargs)
-    if show:
+    instance = generate_widget_class(Form, uic_cls, opt)(*args, **kwargs)
+    if opt.show:
         instance.show()
-    if splash:
-        sp_scr.close()  # finish(instance)
-    if loop:
+    if opt.splash:
+        opt.splash['sp_scr'].close()  # finish(instance)
+    if opt.loop:
         app().exec()
     return instance
+
+
+class QtFormWrapper():
+    init_args = None  # generate_widget_class sets to `SimpleNamespace` object
+
+    def __init__(self, *args, **kwargs):
+        opt = self.init_args
+        print(opt)
+        flags_ = (Qt.WindowFlags(opt.flags or 0) |
+                  (Qt.WindowStaysOnTopHint if opt.ontop else 0))
+        kwargs, super_kwargs = split_kwargs(kwargs)
+        if flags_:
+            super_kwargs[FLAGS_KW] = Qt.WindowFlags(flags_)
+        super(Form, self).__init__(**super_kwargs)
+        if hasattr(self, "setupUi"):  # init `loadUiType` generated class
+            self.setupUi(self)
+            if opt.layout:
+                raise Exception("Cannot use layout and UI file")
+        if opt.layout and issubclass(opt.layout, QtWidgets.QLayout):
+            opt.layout(self)
+        if opt.icon:
+            self.setWindowIcon(get_icon(opt.icon))
+        if opt.title:
+            self.setWindowTitle(opt.title)
+        if opt.tray is not None:
+            self.init_tray({} if opt.tray is True else opt.tray)
+        self.app = app()
+        self.splashscreen = opt.splash.get('sp_scr', None)
+        self.generateElipsisMenus()
+        self.set_slot_prefix(opt.slot_prefix or options.get("slot_prefix"))
+        self._connections = []  # list of connections made by `connect_all`
+        self.__connect_called = False
+        if opt.connect == 'before':
+            self.connect_all()  # connect signals and events
+        if "__init__" in Form.__dict__:
+            Form.__init__(self, *args, **kwargs)
+        self.splashscreen = None  # delete splash screen
+        if opt.connect == 'after' and not self.__connect_called:
+            self.connect_all()  # connect signals and events
+        QTBUG_50271(self)  # topmost
+
+    def init_tray(self, tray_opts={}):
+        # Tray icon parent is VERY important:
+        # http://python.6.x6.nabble.com/QSystemTrayIcon-still-crashed-app-PyQt4-4-9-1-td4976041.html
+        if hasattr(self, "tray"):
+            raise Exception("Widget already has 'tray' attr")
+        if not (tray_opts or isinstance(tray_opts, dict)):
+            self.tray = None  # no tray icon
+            return
+        if 'icon' not in tray_opts:  # get from window
+            tray_opts["icon"] = self.windowIcon()
+        self.tray = SystemTrayIcon(get_icon(tray_opts["icon"]), self)
+        if 'tip' in tray_opts:
+            self.tray.setToolTip(tray_opts['tip'])
+        # Qt doc:"The system tray icon does not take ownership of the menu"
+        self.tray.setContextMenu(QtWidgets.QMenu(self))
+        self.tray.show()
+        # important! open qdialog, hide main window, close qdialog:
+        # trayicon stops working
+#        QtGui.qApp.setQuitOnLastWindowClosed(False)
+
+    def set_slot_prefix(self, prefix):
+        if not prefix:
+            self.slot_prefix = ""
+            return
+        if not prefix.isidentifier():
+            raise Exception("Provided prefix '%s' is not a valid "
+                            "Python identifier" % prefix)
+        self.slot_prefix = prefix + "_"
+
+    def connect_all(self):
+        """Connect signals and events to appropriate members.
+        Installs event filter if there's /eventFilter/ member.
+        Example: def <object>_<signal/slot>():"""
+        self.__connect_called = True
+        if self._connections:
+            debug("Reconnect all")
+            for meth, handl in self._connections:
+                meth.disconnect(getattr(self, handl))
+            self._connections = []
+        widgets, members = super().__dict__.copy(), Form.__dict__
+        widgets['self'] = self
+#            print(widgets)
+        con_sig, con_evt = [], []
+        for i in widgets:
+            if not hasattr(widgets[i], 'metaObject') or \
+                    callable(widgets[i]):  # FIXME: why callables(?)
+                continue  # FIXME: redirect stdout closeEvent(?)
+            signals = _get_object_methods(widgets[i],
+                                            QtCore.QMetaMethod.Signal)
+#                print(i, signals)
+            for m in members:
+                if not m.startswith(self.slot_prefix + i):
+                    continue
+                meth_name = m[len(self.slot_prefix) + len(i) + 1:]
+                method = getattr(widgets[i], meth_name, None)
+                if not method:
+                    print("Method '%s' of '%s' not found" % (meth_name, i))
+                    continue
+                binded_method = getattr(self, m)
+                if meth_name in signals:
+                    method.connect(binded_method)
+                    # save names instead of refs or will crash on app.quit
+                    self._connections.append((method, m))
+                    con_sig.append("%s.%s" % (i, meth_name))
+                else:  # assume it's an event  # elif i != 'self'
+                    setattr(widgets[i], meth_name, binded_method)
+                    con_evt.append("%s.%s" % (i, meth_name))
+        if "eventFilter" in members:
+            self.installEventFilter(self)
+            con_evt.append("Event filter")
+        if con_sig:
+            debug("Signals connected:", ", ".join(con_sig))
+        if con_evt:
+            debug("Events connected:", ", ".join(con_evt))
+
+    def generateElipsisMenus(self):
+        "Group widgets in 'elipsis_...' layout under ⁞-button menu"
+        widgets, elipsis_btns = super().__dict__, []
+        for i in widgets:
+            if i.startswith('elipsis_'):
+                elipsis = widgets[i]
+                if not isinstance(elipsis, QtWidgets.QLayout):
+                    continue
+                menu = QtWidgets.QMenu()
+                wgts = [elipsis.itemAt(j).widget()
+                        for j in range(elipsis.count())]
+                for wgt in wgts:
+                    act_wgt = QtWidgets.QWidgetAction(menu)
+                    act_wgt.setDefaultWidget(wgt)
+                    menu.addAction(act_wgt)
+                elipsis_btn = QtWidgets.QToolButton(self)
+                elipsis_btn.setAutoRaise(True)
+                elipsis_btn.setStyleSheet(
+                    "QToolButton:menu-indicator{image:none}")
+                elipsis_btn.setText("⁞")  # ⋮
+                elipsis_btn.setFont(QtGui.QFont('Arial Unicode MS', 9))
+                elipsis_btn.setPopupMode(elipsis_btn.InstantPopup)
+                elipsis.addWidget(elipsis_btn)
+                elipsis_btn.setMenu(menu)
+                elipsis_btn.setObjectName('elipsisbtn_'+i[8:])
+                elipsis_btns.append(elipsis_btn)
+        for i in elipsis_btns:
+            setattr(self, i.objectName(), i)
+
+    def setTopmost(self, b=True):
+        was_visible = self.isVisible()
+        if was_visible:
+            # `setWindowFlags` resets size if setGeometry was never called
+            self.setGeometry(self.geometry())
+        try:  # Qt>=5.9
+            self.setWindowFlag(Qt.WindowStaysOnTopHint, b)
+        except AttributeError:
+            flags = self.windowFlags()
+            self.setWindowFlags((flags | Qt.WindowStaysOnTopHint)
+                                if b else
+                                (flags & ~Qt.WindowStaysOnTopHint))
+        if was_visible:
+            self.show()
+        QTBUG_50271(self)  # topmost
+
+    def isTopmost(self):
+        return self.windowFlags() & Qt.WindowStaysOnTopHint == \
+            Qt.WindowStaysOnTopHint
 
 
 if __name__ == '__main__':
