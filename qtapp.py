@@ -20,6 +20,8 @@ options = {'skip_missing_resources': False, 'debug': False,
            'slot_prefix': ''}
 FLAGS_KW = 'flags' if Qt_API.startswith('pyqt') else 'f' # QWidget init arg
 
+print("Qt %s, bindings %s" % (QT_VERSION, Qt_API))
+
 try:  # Application path
     import __main__
     app_entry = Path(sys.executable if getattr(sys, 'frozen', False)
@@ -577,5 +579,3 @@ if __name__ == '__main__':
 
     options['debug'] = True
     QtForm(Form)
-else:
-    print("Loaded shared qtapp module (Qt %s)" % QtCore.__version__)
