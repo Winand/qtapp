@@ -429,7 +429,10 @@ class QtFormWrapper():
         kwargs, super_kwargs = split_kwargs(kwargs)
         if flags_:
             super_kwargs[FLAGS_KW] = Qt.WindowFlags(flags_)
-        super(opt.UserClass, self).__init__(**super_kwargs)
+        # Find base widget class from `QtWidgets` module
+        BaseWidget = next(i for i in self.__class__.__mro__
+                          if i.__module__.endswith("QtWidgets"))
+        BaseWidget.__init__(self, **super_kwargs)
         if hasattr(self, "setupUi"):  # init `loadUiType` generated class
             self.setupUi(self)
             if opt.layout:
@@ -497,9 +500,10 @@ class QtFormWrapper():
                 meth.disconnect(getattr(self, handl))
             self._connections = []
         widgets = super().__dict__.copy()
-        members = self.init_args.UserClass.__dict__
         widgets['self'] = self
-#            print(widgets)
+        members = {}  # all user class attributes
+        for i in self.init_args.UserClass.__mro__[:-1]:  # except for `object`
+            members.update(i.__dict__)
         con_sig, con_evt = [], []
         for i in widgets:
             if not hasattr(widgets[i], 'metaObject') or \
@@ -584,16 +588,27 @@ class QtFormWrapper():
 
 
 if __name__ == '__main__':
-    class Form():
+    class ParentClass():
+        def __init__(self):
+            self.pushButton2 = QtWidgets.QPushButton("Push2", self)
+            self.layout().addWidget(self.pushButton2)
+
+        def pushButton2_clicked(self):
+            print('Button 2 clicked')
+
+    class Form(ParentClass):
         _loop_ = True
+        _layout_ = QtWidgets.QVBoxLayout
         _ontop_ = True
 
         def __init__(self, *args, **kwargs):
-            self.pushButton1 = QtWidgets.QPushButton("Push", self)
+            super().__init__(*args, **kwargs)
+            self.pushButton1 = QtWidgets.QPushButton("Push 1", self)
+            self.layout().addWidget(self.pushButton1)
             self.setGeometry(200, 200, 200, 200)
 
         def pushButton1_clicked(self):
-            print('Button clicked')
+            print('Button 1 clicked')
 
         def paintEvent(self, event):
             p = QtGui.QPainter(self)
