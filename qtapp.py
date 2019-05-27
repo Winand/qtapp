@@ -252,7 +252,8 @@ class QtApp(QtWidgets.QApplication):
                 str(app_entry))
         self.setWindowIcon(get_icon(QtWidgets.QStyle.SP_TitleBarMenuButton))
 
-    def load_resources(self, path):
+    @classmethod
+    def load_resources(path):
         "Load .qrc file from specified `path`"
         target_path = str(Path(path).parent.absolute())
         load_qrc(path, target_path)
@@ -315,7 +316,7 @@ def generate_widget_class(Cls, Ui_Cls, init_args):
     Generates a class based on `Cls`, `WidgetTemplate` and `QWidget` if needed
     `Ui_Cls` - None or tuple of classes returned by `loadUiType`
     `init_args` - `SimpleNamespace` arguments object. It is set as a variable
-                  of the generated class 
+                  of the generated class
     """
     bases = QtFormWrapper, Cls
     if Ui_Cls:
@@ -363,9 +364,8 @@ def QTBUG_50271(widget):
     WS_EX_TOPMOST = 8
     HWND_TOPMOST, HWND_NOTOPMOST = -1, -2
     SWP_NOSIZE, SWP_NOMOVE = 1, 2
-    is_topmost = user32.GetWindowLongW(int(widget.winId()),
-                                        GWL_EXSTYLE) & WS_EX_TOPMOST \
-                                        == WS_EX_TOPMOST
+    is_topmost = user32.GetWindowLongW(int(widget.winId()), GWL_EXSTYLE) \
+        & WS_EX_TOPMOST == WS_EX_TOPMOST
     b = widget.windowFlags() & Qt.WindowStaysOnTopHint == \
         Qt.WindowStaysOnTopHint
     if b != is_topmost:
