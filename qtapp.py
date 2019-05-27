@@ -487,7 +487,7 @@ class QtFormWrapper():
         if not prefix.isidentifier():
             raise Exception("Provided prefix '%s' is not a valid "
                             "Python identifier" % prefix)
-        self.slot_prefix = prefix + "_"
+        self.slot_prefix = prefix + "_"  # prefix always ends with underscore
 
     def connect_all(self):
         """Connect signals and events to appropriate members.
@@ -513,14 +513,14 @@ class QtFormWrapper():
                                             QtCore.QMetaMethod.Signal)
 #                print(i, signals)
             for m in members:
-                if not m.startswith(self.slot_prefix + i):
+                if not m.startswith(self.slot_prefix + i + "_"):
                     continue
                 meth_name = m[len(self.slot_prefix) + len(i) + 1:]
                 method = getattr(widgets[i], meth_name, None)
                 if not method:
                     print("Method '%s' of '%s' not found" % (meth_name, i))
                     continue
-                binded_method = getattr(self, m)
+                binded_method = getattr(self, m)  # resolves inherit. problem
                 if meth_name in signals:
                     method.connect(binded_method)
                     # save names instead of refs or will crash on app.quit
