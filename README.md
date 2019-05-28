@@ -21,8 +21,9 @@ Documentation:
 `options` - `dict` with various options
   Members:
   `skip_missing_resources`=False - do not raise error if .qrc-file not found
-  `debug`=False - print various debug messages
+  `debug`=False - print various debug messages to stdout
   `slot_prefix`="" - slot name prefix, see `connect_all`
+  `compiled_qrc`=True - compile resource files to .pyc instead of .py
 `QtApp` - QApplication subclass
   Members:
   `path` - application path

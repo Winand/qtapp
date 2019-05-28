@@ -18,7 +18,7 @@ from qtpy import API as Qt_API, LooseVersion as ver, QT_VERSION
 Qt = QtCore.Qt
 _app = None  # QApplication instance
 options = {'skip_missing_resources': False, 'debug': False,
-           'slot_prefix': ''}
+           'slot_prefix': '', 'compiled_qrc': True}
 FLAGS_KW = 'flags' if Qt_API.startswith('pyqt') else 'f' # QWidget init arg
 
 print("Qt %s, bindings %s" % (QT_VERSION, Qt_API))
@@ -129,7 +129,8 @@ def load_qrc(path_qrc, target_path):
             debug("Resource file not found:", path_qrc)
             return
         raise FileNotFoundError(path_qrc)
-    path_pyc = (target_path / ("rc_" + path_qrc.name)).with_suffix(".pyc")
+    ext = ".pyc" if options.get('compiled_qrc') else ".py"
+    path_pyc = (target_path / ("rc_" + path_qrc.name)).with_suffix(ext)
     if not path_pyc.exists() or (path_pyc.stat().st_mtime <
                                  path_qrc.stat().st_mtime):
         compile_qrc(path_qrc, path_pyc)
