@@ -20,6 +20,9 @@ _app = None  # QApplication instance
 options = {'skip_missing_resources': False, 'debug': False,
            'slot_prefix': '', 'compiled_qrc': True}
 FLAGS_KW = 'flags' if Qt_API.startswith('pyqt') else 'f' # QWidget init arg
+if Qt_API.startswith('pyside'):
+    import pyside2uic  # monkey-patch qtpy to use pyside2uic with PySide2
+    uic.compileUi = pyside2uic.compileUi
 
 print("Qt %s, bindings %s" % (QT_VERSION, Qt_API))
 
@@ -43,9 +46,9 @@ def loadUiType(uifile):
     "loadUiType which also compiles and loads resources"
     from io import StringIO
     code_string = StringIO()
-    uic.compileUi(uifile, code_string, resource_suffix='')
+    uic.compileUi(uifile, code_string)
     winfo = parse_ui(uifile)  # get info from ui-file
-    res_imports = ["import " + i.stem for i in winfo['resources']]
+    res_imports = ["import %s_rc" % i.stem for i in winfo['resources']]
     source = "\n".join(i for i in code_string.getvalue().splitlines()
                        if i not in res_imports)  # skip resource files
     ui_globals = {}
@@ -99,20 +102,27 @@ def subprocess_run(args):
             raise subprocess.CalledProcessError(rc, args)
 
 
-def compile_qrc(path_qrc, path_dst: Path):
-    "Compile .qrc file to .py then optionally to .pyc"
-    target_path = path_dst.parent
-    path_py = target_path / "_temp_rc_.py" \
-        if path_dst.suffix.lower() == ".pyc" else path_dst
-    args = ['-o', str(path_py), str(path_qrc)]
+def rcc(qrc_path, output_path):
+    "Compile resources"
+    args = ['-o', str(output_path), str(qrc_path)]
     if ver(QT_VERSION) < "5":
         # https://riverbankcomputing.com/pipermail/pyqt/2010-December/028669.html
         subprocess_run(['pyrcc4', '-py3'] + args)
+    elif Qt_API.startswith('pyside'):
+        subprocess_run(['pyside2-rcc'] + args)
     else:  # exe->bat https://www.riverbankcomputing.com/pipermail/pyqt/2017-January/038529.html
         try:
             subprocess_run(['pyrcc5'] + args)
         except FileNotFoundError:
             subprocess_run(['pyrcc5.bat'] + args)
+
+
+def compile_qrc(path_qrc, path_dst: Path):
+    "Compile .qrc file to .py then optionally to .pyc"
+    target_path = path_dst.parent
+    path_py = target_path / "_temp_rc_.py" \
+        if path_dst.suffix.lower() == ".pyc" else path_dst
+    rcc(path_qrc, path_py)
     if path_dst.suffix.lower() == ".pyc":  # compile to .pyc
         py_compile.compile(str(path_py), cfile=str(path_dst), doraise=True)
         path_py.unlink()
