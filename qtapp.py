@@ -324,7 +324,7 @@ def split_kwargs(kwargs):
 
 def generate_widget_class(Cls, Ui_Cls, init_args):
     """
-    Generates a class based on `Cls`, `WidgetTemplate` and `QWidget` if needed
+    Generates a class based on `Cls`, `QtFormWrapper` and `QWidget` if needed
     `Ui_Cls` - None or tuple of classes returned by `loadUiType`
     `init_args` - `SimpleNamespace` arguments object. It is set as a variable
                   of the generated class
