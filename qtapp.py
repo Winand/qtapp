@@ -322,18 +322,21 @@ def split_kwargs(kwargs):
     return kw, super_kw
 
 
-def generate_widget_class(Cls, Ui_Cls, init_args):
+def generate_widget_class(Cls, Ui_Cls, init_args, Base_Cls=QtWidgets.QWidget):
     """
     Generates a class based on `Cls`, `QtFormWrapper` and `QWidget` if needed
     `Ui_Cls` - None or tuple of classes returned by `loadUiType`
     `init_args` - `SimpleNamespace` arguments object. It is set as a variable
                   of the generated class
+    `Base_Cls`=QWidget - base Qt widget class, it should derive from QWidget
     """
     bases = QtFormWrapper, Cls
     if Ui_Cls:
         bases += Ui_Cls
-    if not (Ui_Cls or issubclass(Cls, QtWidgets.QWidget)):
-        bases += QtWidgets.QWidget,
+    assert issubclass(Base_Cls, QtWidgets.QWidget), \
+        "Base_Cls does not derive from QWidget"
+    if not (Ui_Cls or issubclass(Cls, Base_Cls)):
+        bases += Base_Cls,
     Generated_Cls = type("%s__Wrapper" % Cls.__name__, bases, {})
     Generated_Cls.init_args = init_args
     return Generated_Cls
@@ -387,7 +390,8 @@ def QTBUG_50271(widget):
 
 def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
            tray=None, splash=None, loop=None, connect=None, slot_prefix=None,
-           title=None, layout=None, draggable=None, **kwargs):
+           title=None, layout=None, draggable=None, _base=QtWidgets.QWidget,
+           **kwargs):
     # get arguments from class members: _ArgName_
     getatt = lambda name: getattr(Form, name, None)
     opt = SimpleNamespace(
@@ -421,7 +425,8 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
         uic_cls = loadUiType(ui_path)
     else:
         debug("Cannot load UI file", ui_path)
-    instance = generate_widget_class(Form, uic_cls, opt)(*args, **kwargs)
+    Widget_cls = generate_widget_class(Form, uic_cls, opt, _base)
+    instance = Widget_cls(*args, **kwargs)
     if opt.show:
         instance.show()
     if opt.splash:
@@ -429,6 +434,12 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
     if opt.loop:
         app().exec()
     return instance
+
+
+def Dialog(Form, *args, **kwargs):
+    instance = QtForm(Form, *args, show=False, _base=QtWidgets.QDialog,
+                      **kwargs)
+    instance.exec()
 
 
 class QtFormWrapper():
@@ -643,6 +654,8 @@ if __name__ == '__main__':
 
         def pushButton1_clicked(self):
             print('Button 1 clicked')
+            xx=Dialog(ParentClass, layout=QtWidgets.QHBoxLayout)
+            print(xx)
 
         def paintEvent(self, event):
             p = QtGui.QPainter(self)
