@@ -386,8 +386,8 @@ def QTBUG_50271(widget):
 
 
 def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
-           tray=None, splash=None, loop=None, connect=None,
-           slot_prefix=None, title=None, layout=None, **kwargs):
+           tray=None, splash=None, loop=None, connect=None, slot_prefix=None,
+           title=None, layout=None, draggable=None, **kwargs):
     # get arguments from class members: _ArgName_
     getatt = lambda name: getattr(Form, name, None)
     opt = SimpleNamespace(
@@ -403,6 +403,7 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
         slot_prefix=first_val(slot_prefix, getatt("_slot_prefix_")),
         title=first_val(title, getatt("_title_")),
         layout=first_val(layout, getatt("_layout_")),
+        draggable=first_val(draggable, getatt("_draggable_")),
         UserClass=Form,
     )
     # Note: do not store widget ref. in QtApp instance or del. it before exit
@@ -469,7 +470,29 @@ class QtFormWrapper():
         self.splashscreen = None  # delete splash screen
         if opt.connect == 'after' and not self.__connect_called:
             self.connect_all()  # connect signals and events
+        if opt.draggable:
+            self._dragging_start_pos = None
+            self.mousePressEvent = self._mousePressEvent
+            self.mouseMoveEvent = self._mouseMoveEvent
+            self.mouseReleaseEvent = self._mouseReleaseEvent
         QTBUG_50271(self)  # topmost
+
+    def _mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._dragging_start_pos = event.pos()
+        super().mousePressEvent(event)
+
+    def _mouseMoveEvent(self, event):
+        if self._dragging_start_pos:
+            # https://doc.qt.io/qt-5/application-windows.html#window-geometry
+            frame_shift = self.geometry().topLeft() - self.pos()
+            new_pos = event.pos() - self._dragging_start_pos - frame_shift
+            self.move(self.mapToParent(new_pos))
+        super().mouseMoveEvent(event)
+
+    def _mouseReleaseEvent(self, event):
+        self._dragging_start_pos = None
+        super().mouseReleaseEvent(event)
 
     def init_tray(self, tray_opts={}):
         # Tray icon parent is VERY important:
