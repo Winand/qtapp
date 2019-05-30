@@ -441,9 +441,11 @@ class QtFormWrapper():
         kwargs, super_kwargs = split_kwargs(kwargs)
         if flags_:
             super_kwargs[FLAGS_KW] = Qt.WindowFlags(flags_)
-        # Find base widget class from `QtWidgets` module
+        # Find base widget class from QtWidgets module
+        # Additionally check that the class derives from QWidget
         BaseWidget = next(i for i in self.__class__.__mro__
-                          if i.__module__.endswith("QtWidgets"))
+                          if i.__module__ == QtWidgets.QWidget.__module__ and
+                          issubclass(i, QtWidgets.QWidget))
         BaseWidget.__init__(self, **super_kwargs)
         if hasattr(self, "setupUi"):  # init `loadUiType` generated class
             self.setupUi(self)
