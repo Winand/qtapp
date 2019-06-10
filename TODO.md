@@ -4,3 +4,4 @@ TODO (maybe)
 * cache ui files
 * modal dialogs with returned values
 * "sticky" windows
+* FIX: do not connect signals to members of Qt classes
