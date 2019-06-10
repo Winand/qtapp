@@ -367,7 +367,7 @@ def QTBUG_50271(widget):
     # Sync actual behaviour with WindowStaysOnTopHint flag
     # https://bugreports.qt.io/browse/QTBUG-50271
     # https://stackoverflow.com/questions/51802118
-    if platform.system() != "Windows":
+    if not (platform.system() == "Windows" and ver(QT_VERSION) < "5.10.1"):
         return
     import ctypes
     user32 = ctypes.windll.user32
@@ -380,9 +380,11 @@ def QTBUG_50271(widget):
     b = widget.windowFlags() & Qt.WindowStaysOnTopHint == \
         Qt.WindowStaysOnTopHint
     if b != is_topmost:
+        debug("Fix: Make window topmost")
         flag = HWND_TOPMOST if b else HWND_NOTOPMOST
-        user32.SetWindowPos(int(widget.winId()), flag, 0, 0, 0, 0,
-                            SWP_NOSIZE | SWP_NOMOVE)
+        swp = lambda: user32.SetWindowPos(int(widget.winId()), flag, 0, 0, 0,
+                                          0, SWP_NOSIZE | SWP_NOMOVE)
+        QtCore.QTimer.singleShot(0, swp)  # call later
 
 
 def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
