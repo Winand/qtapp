@@ -19,7 +19,9 @@ Qt = QtCore.Qt
 _app = None  # QApplication instance
 options = {'skip_missing_resources': False, 'debug': False,
            'slot_prefix': '', 'compiled_qrc': True}
-FLAGS_KW = 'flags' if Qt_API.startswith('pyqt') else 'f' # QWidget init arg
+# QWidget init `flags` argument
+flags_kw_d = 'flags' if Qt_API.startswith('pyqt') else 'f'
+flags_kws = {'PySide2.QtWidgets.QWizard': 'flags'}
 if Qt_API.startswith('pyside'):
     import pyside2uic  # monkey-patch qtpy to use pyside2uic with PySide2
     uic.compileUi = pyside2uic.compileUi
@@ -437,17 +439,23 @@ class QtFormWrapper():
     init_args = None  # generate_widget_class sets to `SimpleNamespace` object
 
     def __init__(self, *args, **kwargs):
-        opt = self.init_args
-        flags_ = (Qt.WindowFlags(opt.flags or 0) |
-                  (Qt.WindowStaysOnTopHint if opt.ontop else 0))
-        kwargs, super_kwargs = split_kwargs(kwargs)
-        if flags_:
-            super_kwargs[FLAGS_KW] = Qt.WindowFlags(flags_)
         # Find base widget class from QtWidgets module
         # Additionally check that the class derives from QWidget
         BaseWidget = next(i for i in self.__class__.__mro__
                           if i.__module__ == QtWidgets.QWidget.__module__ and
                           issubclass(i, QtWidgets.QWidget))
+        base_cls_name = "%s.%s" % (BaseWidget.__module__, BaseWidget.__name__)
+        opt = self.init_args
+        flags_ = (Qt.WindowFlags(opt.flags or 0) |
+                  (Qt.WindowStaysOnTopHint if opt.ontop else 0))
+        kwargs, super_kwargs = split_kwargs(kwargs)
+        if flags_:
+            flags_kw = flags_kws.get(base_cls_name, flags_kw_d)
+            super_kwargs[flags_kw] = Qt.WindowFlags(flags_)
+            # Alternatively __init__ exception text can be parsed:
+            # PySide: "'f()' is not a Qt property or a signal"
+            # PyQt: "'f' is an unknown keyword argument"
+            # str(e).split(maxsplit=1)[0].strip('\'"()')
         BaseWidget.__init__(self, **super_kwargs)
         if hasattr(self, "setupUi"):  # init `loadUiType` generated class
             self.setupUi(self)
