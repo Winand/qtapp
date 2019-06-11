@@ -25,6 +25,7 @@ flags_kws = {'PySide2.QtWidgets.QWizard': 'flags'}
 if Qt_API.startswith('pyside'):
     import pyside2uic  # monkey-patch qtpy to use pyside2uic with PySide2
     uic.compileUi = pyside2uic.compileUi
+backend_pkgs = Qt_API, "shiboken", "sip"  # Qt related lowercase package names
 
 print("Qt %s, bindings %s" % (QT_VERSION, Qt_API))
 
@@ -42,6 +43,18 @@ except AttributeError:  # interactive interpreter mode
 def debug(*args, flush=True, **kwargs):
     if options.get('debug'):
         print(*args, **kwargs, flush=flush)
+
+
+def is_Qt_class(cls, is_qwidget=None):
+    """
+    Checks if a class is from Qt/sip/Shiboken package
+    is_qwidget=None|True - check additionally if the class is QWidget subclass
+    """
+    if not cls.__module__.split(".", 1)[0].lower() in backend_pkgs:
+        return False
+    if is_qwidget:
+        return issubclass(cls, QtWidgets.QWidget)
+    return True
 
 
 def loadUiType(uifile):
@@ -439,11 +452,9 @@ class QtFormWrapper():
     init_args = None  # generate_widget_class sets to `SimpleNamespace` object
 
     def __init__(self, *args, **kwargs):
-        # Find base widget class from QtWidgets module
-        # Additionally check that the class derives from QWidget
+        # Find base Qt class, check that the class derives from QWidget
         BaseWidget = next(i for i in self.__class__.__mro__
-                          if i.__module__ == QtWidgets.QWidget.__module__ and
-                          issubclass(i, QtWidgets.QWidget))
+                          if is_Qt_class(i, is_qwidget=True))
         base_cls_name = "%s.%s" % (BaseWidget.__module__, BaseWidget.__name__)
         opt = self.init_args
         flags_ = (Qt.WindowFlags(opt.flags or 0) |
@@ -549,7 +560,8 @@ class QtFormWrapper():
         widgets['self'] = self
         members = {}  # all user class attributes
         for i in self.init_args.UserClass.__mro__[:-1]:  # except for `object`
-            members.update(i.__dict__)
+            if not is_Qt_class(i):  # skip Qt/sip/Shiboken classes
+                members.update(i.__dict__)
         con_sig, con_evt = [], []
         for i in widgets:
             if not hasattr(widgets[i], 'metaObject') or \
