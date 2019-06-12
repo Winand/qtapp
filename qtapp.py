@@ -443,16 +443,26 @@ def Dialog(Form, *args, get_result=True, **kwargs):
     Dialog instance has `answer` function to get user answer.
     If `get_result`=True returns `(result, answer)` otherwise QDialog instance
     """
+    # WARNING: Do not add unbound methods which refer to `instance`.
+    # It prevents object from being collected by gc. Use `types.MethodType` or
+    # inheritance (see `Dialog_`).
     assert 'show' not in kwargs, "Dialog does not support `show` argument"
     assert '_base' not in kwargs, "Dialog does not support `_base` argument"
-    instance = QtForm(Form, *args, show=False, _base=QtWidgets.QDialog,
-                      **kwargs)
-    def accept(retval=None):
-        instance._answer = retval
-        super(instance.__class__, instance).accept()
-    instance.accept = accept
-    instance._answer = None
-    instance.answer = lambda: instance._answer
+    class Dialog_(QtWidgets.QDialog):
+        _answer = None
+
+        def accept(self, retval=None):
+            self._answer = retval
+            super().accept()
+
+        def reject(self, retval=None):
+            self._answer = retval
+            super().reject()
+
+        def answer(self):
+            return self._answer
+    instance = QtForm(Form, *args, show=False, _base=Dialog_, **kwargs)
+    # instance.setAttribute(Qt.WA_DeleteOnClose, True)
     instance.exec()
     if get_result:
         return instance.result(), instance._answer
@@ -665,22 +675,12 @@ if __name__ == '__main__':
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            self.pushButton1 = QtWidgets.QPushButton("Show dialog", self)
+            self.pushButton1 = QtWidgets.QPushButton("Push 1", self)
             self.layout().addWidget(self.pushButton1)
             self.setGeometry(200, 200, 200, 200)
 
         def pushButton1_clicked(self):
-            class DialogCls():
-                _layout_ = QtWidgets.QHBoxLayout
-                def __init__(self):
-                    self.btn = QtWidgets.QPushButton("Accept", self)
-                    self.layout().addWidget(self.btn)
-
-                def btn_clicked(self):
-                    self.accept("Accepted.")
-
-            dlg = Dialog(DialogCls, get_result=False)
-            print("Answer was:", dlg.answer())
+            print('Button 1 clicked')
 
         def paintEvent(self, event):
             p = QtGui.QPainter(self)
