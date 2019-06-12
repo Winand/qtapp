@@ -83,4 +83,13 @@ Documentation:
   `init_tray()` - init. tray icon manually, see `tray` arg. of `QtForm`
   `splashscreen` - `QSplashScreen` if created or None. After _init_ it's None
   `setTopmost`/`isTopmost` - put window on top of all other windows
+
+`Dialog()` - show modal dialog which wraps `QDialog`
+  Arguments:
+  All arguments of QtForm except for `show`.
+  `get_result`=True - return `(result, answer)` otherwise returns QDialog                         instance. See also `QDialog.result`.
+  Members:
+  `accept([answer])` - accept dialog, set answer. See also `QDialog.accept`.
+  `reject([answer])` - reject dialog, set answer. See also `QDialog.reject`.
+  `answer()` - answer set by `accept` or `None`.
 ````

@@ -337,18 +337,21 @@ def split_kwargs(kwargs):
     return kw, super_kw
 
 
-def generate_widget_class(Cls, Ui_Cls, init_args):
+def generate_widget_class(Cls, Ui_Cls, init_args, Base_Cls=QtWidgets.QWidget):
     """
     Generates a class based on `Cls`, `QtFormWrapper` and `QWidget` if needed
     `Ui_Cls` - None or tuple of classes returned by `loadUiType`
     `init_args` - `SimpleNamespace` arguments object. It is set as a variable
                   of the generated class
+    `Base_Cls`=QWidget - base Qt widget class, it should derive from QWidget
     """
     bases = QtFormWrapper, Cls
     if Ui_Cls:
         bases += Ui_Cls
-    if not (Ui_Cls or issubclass(Cls, QtWidgets.QWidget)):
-        bases += QtWidgets.QWidget,
+    assert issubclass(Base_Cls, QtWidgets.QWidget), \
+        "Base_Cls does not derive from QWidget"
+    if not (Ui_Cls or issubclass(Cls, Base_Cls)):
+        bases += Base_Cls,
     Generated_Cls = type("%s__Wrapper" % Cls.__name__, bases, {})
     Generated_Cls.init_args = init_args
     return Generated_Cls
@@ -404,7 +407,8 @@ def QTBUG_50271(widget):
 
 def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
            tray=None, splash=None, loop=None, connect=None, slot_prefix=None,
-           title=None, layout=None, draggable=None, **kwargs):
+           title=None, layout=None, draggable=None, _base=QtWidgets.QWidget,
+           **kwargs):
     # get arguments from class members: _ArgName_
     getatt = lambda name: getattr(Form, name, None)
     opt = SimpleNamespace(
@@ -438,13 +442,47 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
         uic_cls = loadUiType(ui_path)
     else:
         debug("Cannot load UI file", ui_path)
-    instance = generate_widget_class(Form, uic_cls, opt)(*args, **kwargs)
+    Widget_cls = generate_widget_class(Form, uic_cls, opt, _base)
+    instance = Widget_cls(*args, **kwargs)
     if opt.show:
         instance.show()
     if opt.splash:
         opt.splash['sp_scr'].close()  # finish(instance)
     if opt.loop:
         app().exec()
+    return instance
+
+
+def Dialog(Form, *args, get_result=True, **kwargs):
+    """
+    Constructs and shows a modal dialog.
+    QDialog's `accept` can be called with an answer argument.
+    Dialog instance has `answer` function to get user answer.
+    If `get_result`=True returns `(result, answer)` otherwise QDialog instance
+    """
+    # WARNING: Do not add unbound methods which refer to `instance`.
+    # It prevents object from being collected by gc. Use `types.MethodType` or
+    # inheritance (see `Dialog_`).
+    assert 'show' not in kwargs, "Dialog does not support `show` argument"
+    assert '_base' not in kwargs, "Dialog does not support `_base` argument"
+    class Dialog_(QtWidgets.QDialog):
+        _answer = None
+
+        def accept(self, retval=None):
+            self._answer = retval
+            super().accept()
+
+        def reject(self, retval=None):
+            self._answer = retval
+            super().reject()
+
+        def answer(self):
+            return self._answer
+    instance = QtForm(Form, *args, show=False, _base=Dialog_, **kwargs)
+    # instance.setAttribute(Qt.WA_DeleteOnClose, True)
+    instance.exec()
+    if get_result:
+        return instance.result(), instance._answer
     return instance
 
 
