@@ -686,7 +686,7 @@ class QtFormWrapper():
 if __name__ == '__main__':
     class ParentClass():
         def __init__(self):
-            self.pushButton2 = QtWidgets.QPushButton("Push2", self)
+            self.pushButton2 = QtWidgets.QPushButton("Push 2", self)
             self.layout().addWidget(self.pushButton2)
 
         def pushButton2_clicked(self):
