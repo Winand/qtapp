@@ -314,7 +314,7 @@ class QtApp(QtWidgets.QApplication):
             debug('Exit main loop')
 
 
-def module_path(cls):
+def mod_path(cls):
     "Get module folder path from class"
     return Path(sys.executable if getattr(sys, 'frozen', False) else
                 sys.modules[cls.__module__].__file__).absolute().parent
@@ -434,14 +434,15 @@ def QtForm(Form, *args, flags=None, ui=None, ontop=None, show=None, icon=None,
         if isinstance(opt.splash, (str, Path)):
             opt.splash = {'image': opt.splash}
         opt.splash['sp_scr'] = show_splashscreen(opt.splash)
-    ui_path = str(opt.ui or module_path(Form).joinpath(Form.__name__.lower()))
-    if not ui_path.lower().endswith(".ui"):
-        ui_path += ".ui"
     uic_cls = ()
-    if Path(ui_path).exists():
-        uic_cls = loadUiType(ui_path)
-    else:
-        debug("Cannot load UI file", ui_path)
+    if opt.ui != False:  # loading .ui is not disabled
+        ui_path = str(opt.ui or mod_path(Form).joinpath(Form.__name__.lower()))
+        if not ui_path.lower().endswith(".ui"):
+            ui_path += ".ui"
+        if Path(ui_path).exists():
+            uic_cls = loadUiType(ui_path)
+        else:
+            debug("Cannot load UI file", ui_path)
     Widget_cls = generate_widget_class(Form, uic_cls, opt, _base)
     instance = Widget_cls(*args, **kwargs)
     if opt.show:
@@ -508,8 +509,8 @@ class QtFormWrapper():
         BaseWidget.__init__(self, **super_kwargs)
         if hasattr(self, "setupUi"):  # init `loadUiType` generated class
             self.setupUi(self)
-            if opt.layout:
-                raise Exception("Cannot use layout and UI file")
+            if self.layout() and opt.layout:
+                raise Exception("Widget already has layout from UI file")
         if opt.layout and issubclass(opt.layout, QtWidgets.QLayout):
             opt.layout(self)
         if opt.icon:

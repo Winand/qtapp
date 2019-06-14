@@ -40,8 +40,8 @@ Documentation:
            super class [QDialog|QWidget|QMainWindow] if ui-file is not used)
   `*args`=() - additional arguments for user class `__init__`
   `flags`=None - Qt.WindowFlags
-  `ui`=None - path to .ui-file (w/ or w/o file extension),
-              if `None` try lowercase name of `Form` class.
+  `ui`=None - path to .ui-file (file extension is optional), `False` - disable
+              .ui loading, `None` - try lowercase name of `Form` class.
   `ontop`=False - show window always on top, adds `WindowStaysOnTopHint` flag
                   to `flags`.
   `icon`=None - set window icon: QIcon|QStyle.StandardPixmap|image-path.
