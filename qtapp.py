@@ -14,7 +14,7 @@ import signal
 from pathlib import Path
 from types import SimpleNamespace
 from qtpy import QtCore, QtGui, QtWidgets, uic
-from qtpy import API as Qt_API, LooseVersion as ver, QT_VERSION
+from qtpy import API as Qt_API, parse as ver, QT_VERSION
 Qt = QtCore.Qt
 _app = None  # QApplication instance
 options = {'skip_missing_resources': False, 'debug': False,
@@ -120,7 +120,7 @@ def subprocess_run(args):
 def rcc(qrc_path, output_path):
     "Compile resources"
     args = ['-o', str(output_path), str(qrc_path)]
-    if ver(QT_VERSION) < "5":
+    if ver(QT_VERSION) < ver("5"):
         # https://riverbankcomputing.com/pipermail/pyqt/2010-December/028669.html
         subprocess_run(['pyrcc4', '-py3'] + args)
     elif Qt_API.startswith('pyside'):
@@ -231,7 +231,7 @@ class QtApp(QtWidgets.QApplication):
         else:
             debug("Reusing existing QApplication instance")
         super().__init__(sys.argv)
-        if ver(QT_VERSION) >= "5.5.1":
+        if ver(QT_VERSION) >= ver("5.5.1"):
             # http://stackoverflow.com/questions/33736819/pyqt-no-error-msg-traceback-on-exit
             def excepthook(type_, value, traceback_):
                 traceback.print_exception(type_, value, traceback_)
@@ -385,7 +385,7 @@ def QTBUG_50271(widget):
     # Sync actual behaviour with WindowStaysOnTopHint flag
     # https://bugreports.qt.io/browse/QTBUG-50271
     # https://stackoverflow.com/questions/51802118
-    if not (platform.system() == "Windows" and ver(QT_VERSION) < "5.10.1"):
+    if not (platform.system() == "Windows" and ver(QT_VERSION) < ver("5.10.1")):
         return
     import ctypes
     user32 = ctypes.windll.user32
